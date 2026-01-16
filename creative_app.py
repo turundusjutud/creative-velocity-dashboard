@@ -12,28 +12,26 @@ st.set_page_config(
 )
 
 # --- CUSTOM BRANDING CSS ---
-# We force "Light Mode" colors so text is always visible, regardless of user settings.
 st.markdown("""
     <style>
-        /* 1. Main Application Background */
+        /* 1. Force Light Mode & Brand Colors */
         .stApp {
             background-color: #FAFAFA;
             color: #052623;
         }
         
-        /* 2. Text Visibility Fixes */
         p, div, label, span, li {
-            color: #052623; /* Dark Green Text */
+            color: #052623;
         }
         
-        /* 3. Headings */
+        /* 2. Headings */
         h1, h2, h3, h4 {
             color: #052623 !important;
             font-family: 'Helvetica', 'Arial', sans-serif;
             font-weight: 700;
         }
         
-        /* 4. Metric Cards */
+        /* 3. Metric Cards */
         div[data-testid="stMetric"] {
             background-color: #FFFFFF;
             padding: 15px;
@@ -49,16 +47,16 @@ st.markdown("""
             color: #052623 !important;
         }
 
-        /* 5. Custom Insight Boxes (Success/Info) */
+        /* 4. Insight Boxes */
         div.stAlert {
-            background-color: #F0FDFA; /* Very Light Teal */
+            background-color: #F0FDFA;
             border: 1px solid #1A776F;
             color: #052623;
         }
         
-        /* 6. Buttons */
+        /* 5. Buttons */
         div.stButton > button {
-            background-color: #FF7F40; /* Brand Orange */
+            background-color: #FF7F40;
             color: white !important;
             border-radius: 8px;
             border: none;
@@ -80,12 +78,15 @@ st.info("""
 st.title("Creative Strategy Analytics")
 
 # --- INSTRUCTIONS EXPANDER ---
-with st.expander("📝 How to export data from Meta Ads (Click to read)", expanded=False):
+with st.expander("📝 How to export data from Meta Ads (Read this first!)", expanded=False):
     st.markdown("""
+    To ensure the analysis works, your CSV must be formatted exactly like this:
+    
     1. Go to **Ads Manager** -> **Reports** -> **Export Table Data**.
-    2. **Breakdown:** Select **"Day"** (Crucial!).
+    2. **Breakdown:** Select **"Day"** (Under Time).
+       * ⚠️ **IMPORTANT:** Do NOT select any other breakdowns (like Age, Gender, or Placement). The data must be ungrouped to calculate daily totals correctly.
     3. **Level:** Select **"Ad"**.
-    4. **Columns:** `Ad ID`, `Reporting Starts`, `Amount Spent`, `Impressions`, `Link Clicks`, `Purchases` (or your key metric).
+    4. **Columns:** Ensure you have: `Ad ID`, `Reporting Starts`, `Amount Spent`, `Impressions`, `Link Clicks`, `Purchases` (or your main result).
     5. **Export:** Save as .csv and upload on the left.
     """)
 
@@ -95,8 +96,7 @@ def load_data(file):
     df.columns = [c.lower().strip() for c in df.columns]
     
     date_cols = [c for c in df.columns if 'date' in c or 'start' in c]
-    if not date_cols:
-        return None, None, None, None, None, None, None, None
+    if not date_cols: return None, None, None, None, None, None, None, None
     date_col = date_cols[0]
     df[date_col] = pd.to_datetime(df[date_col])
     
@@ -105,8 +105,7 @@ def load_data(file):
     clicks_col = next((c for c in df.columns if 'link click' in c or 'clicks' in c), None)
     ad_id_col = next((c for c in df.columns if 'ad id' in c), None)
     installs_col = next((c for c in df.columns if 'install' in c), None)
-    if not installs_col:
-        installs_col = next((c for c in df.columns if 'result' in c), None)
+    if not installs_col: installs_col = next((c for c in df.columns if 'result' in c), None)
     value_col = next((c for c in df.columns if 'value' in c or 'revenue' in c), None)
     
     return df, date_col, spend_col, imps_col, installs_col, clicks_col, value_col, ad_id_col
@@ -120,13 +119,12 @@ if uploaded_file is not None:
     if raw_df is not None and spend_col and ad_id_col:
         st.sidebar.success("✅ Data Loaded Successfully")
         
-        # --- IMPROVED SIDEBAR FILTERS ---
+        # --- SIDEBAR SETTINGS ---
         st.sidebar.markdown("---")
         st.sidebar.header("⚙️ Settings")
         
         st.sidebar.markdown("**Step 1: Clean the Data**")
-        st.sidebar.caption("Many accounts have 'junk' ads that spent €5 and paused. These skew the averages. Use this filter to hide them.")
-        
+        st.sidebar.caption("Hide 'failed tests' that spent very little to see the true trend.")
         min_spend = st.sidebar.number_input(
             "Min. Lifetime Spend per Ad (€)", 
             value=10,
@@ -163,42 +161,44 @@ if uploaded_file is not None:
         analysis_df = analysis_df[analysis_df[spend_col] > 0]
 
         # --- 1. VELOCITY ---
-        st.header("1. Does Velocity Impact Performance?")
+        st.header("1. Do New Creatives Improve Performance?")
+        st.caption("Does the act of launching more ads (Velocity) correlate with better business results?")
+        
         available_metrics = list(analysis_df.select_dtypes(include=[np.number]).columns)
         available_metrics = [m for m in available_metrics if 'id' not in m and 'week' not in m]
-        
-        default_ix = 0
-        if 'Calculated_CPA' in available_metrics: default_ix = available_metrics.index('Calculated_CPA')
+        default_ix = available_metrics.index('Calculated_CPA') if 'Calculated_CPA' in available_metrics else 0
 
         c1, c2 = st.columns([2,1])
         metric_choice = c1.selectbox("Select KPI to Analyze:", available_metrics, index=default_ix)
-        lag_weeks = c2.slider("Lag (Weeks):", 0, 8, 0, help="Does work done today affect results X weeks later?")
+        
+        # Time Lag Slider with Explainer
+        lag_weeks = c2.slider("Time Lag (Weeks):", 0, 8, 0)
+        st.caption(f"**How to use Time Lag:** If you launch 10 ads today, conversions often don't peak until next week. Setting this to **1 or 2 weeks** helps you see if today's work pays off later.")
 
         analysis_df['lagged_uploads'] = analysis_df['new_creatives_count'].shift(lag_weeks)
         valid_data = analysis_df.dropna(subset=['lagged_uploads', metric_choice])
 
-        # --- RESTORED CORRELATION INSIGHTS ---
+        # Correlation Insights
         if len(valid_data) > 2:
             corr = valid_data['lagged_uploads'].corr(valid_data[metric_choice])
             
             c_metric, c_text = st.columns([1, 3])
             c_metric.metric("Correlation Score", f"{corr:.2f}")
             
-            # Smart Text Logic
-            is_good_metric = 'CPA' not in metric_choice and 'Cost' not in metric_choice # True if Higher is Better
+            is_good_metric = 'CPA' not in metric_choice and 'Cost' not in metric_choice 
             
             with c_text:
                 if abs(corr) < 0.25:
-                    st.info("⚪ **Neutral / No Correlation:** Increasing creative volume currently has no clear impact on this metric.")
+                    st.info("⚪ **Neutral:** No clear correlation found. Try adjusting the Time Lag.")
                 elif corr < -0.3:
-                    if not is_good_metric: # CPA goes down (Good)
+                    if not is_good_metric: 
                         st.success(f"🟢 **Good News:** Strong negative correlation. As you launch **MORE** ads, your {metric_choice} goes **DOWN**.")
-                    else: # ROAS goes down (Bad)
+                    else: 
                         st.warning(f"🔴 **Warning:** Negative correlation. As you launch **MORE** ads, your {metric_choice} goes **DOWN**.")
                 elif corr > 0.3:
-                    if is_good_metric: # ROAS goes up (Good)
+                    if is_good_metric: 
                         st.success(f"🟢 **Good News:** Positive correlation. As you launch **MORE** ads, your {metric_choice} goes **UP**.")
-                    else: # CPA goes up (Bad)
+                    else: 
                         st.warning(f"🔴 **Warning:** Positive correlation. Launching more ads is correlated with **HIGHER** costs.")
 
         fig = go.Figure()
@@ -206,7 +206,7 @@ if uploaded_file is not None:
         fig.add_trace(go.Scatter(x=valid_data['week_start'], y=valid_data[metric_choice], name=metric_choice, mode='lines+markers', line=dict(color='#1A776F', width=3), yaxis='y2'))
         
         fig.update_layout(
-            title=f'Trend: Velocity vs {metric_choice}',
+            title=f'Timeline: New Creatives vs {metric_choice}',
             xaxis=dict(title='Week'),
             yaxis=dict(title='Count', side='left', showgrid=False),
             yaxis2=dict(title=metric_choice, side='right', overlaying='y', showgrid=False),
@@ -237,7 +237,6 @@ if uploaded_file is not None:
         eff_comp = raw_with_birthdays.groupby('Status')[numeric_cols].sum().reset_index()
         sel_logic = metric_options[s2_choice]
         
-        # Calculate Logic
         if sel_logic == 'calc_cpa': eff_comp['val'] = eff_comp[spend_col] / eff_comp[installs_col]; is_lower_better = True
         elif sel_logic == 'calc_ipm': eff_comp['val'] = (eff_comp[installs_col] / eff_comp[imps_col]) * 1000; is_lower_better = False
         elif sel_logic == 'calc_ctr': eff_comp['val'] = (eff_comp[clicks_col] / eff_comp[imps_col]) * 100; is_lower_better = False
@@ -250,9 +249,7 @@ if uploaded_file is not None:
             if old_val == 0: old_val = 0.0001
             diff = ((fresh_val - old_val) / old_val) * 100
             
-            # Insight Logic
             is_better = (is_lower_better and diff < 0) or (not is_lower_better and diff > 0)
-            diff_text = f"{abs(diff):.1f}% {'Cheaper' if is_lower_better and diff < 0 else 'Higher'}"
             
             c1, c2 = st.columns(2)
             c1.metric(f"Fresh {s2_choice}", f"{fresh_val:,.2f}", f"{diff:+.1f}% vs Old", 
@@ -262,7 +259,7 @@ if uploaded_file is not None:
                 if is_better:
                     st.success(f"✅ **Fresh Ads are Winning:** They perform {abs(diff):.1f}% better than fatigued ads.")
                 else:
-                    st.warning(f"⚠️ **Old Ads are Winning:** Your fresh ads are performing {abs(diff):.1f}% worse. Check creative quality.")
+                    st.warning(f"⚠️ **Old Ads are Winning:** Fresh ads perform {abs(diff):.1f}% worse. Check creative quality.")
             
             fig_comp = px.bar(
                 eff_comp, x='Status', y='val', 
@@ -276,7 +273,15 @@ if uploaded_file is not None:
 
         # --- 3. LIFECYCLE ---
         st.markdown("---")
-        st.header("3. Decay Curve")
+        st.header("3. The Decay Curve (Lifecycle)")
+        st.markdown("""
+        **What am I looking at?** This chart shows the average performance of an ad on Day 1, Day 2, Day 3, etc.
+        
+        **Why 21 Days?** We mark Day 21 (Red line) because in modern paid social, most creatives "fatigue" or lose efficiency after 3 weeks. 
+        * If the line drops/spikes *before* the red line, your ads are fatiguing fast.
+        * If the line stays flat *after* the red line, you have strong "Evergreen" content.
+        """)
+        
         life_df = raw_with_birthdays.groupby('age')[numeric_cols].sum().reset_index()
         
         if sel_logic == 'calc_cpa': life_df['y'] = life_df[spend_col] / life_df[installs_col]
@@ -292,6 +297,18 @@ if uploaded_file is not None:
         fig_life.add_vline(x=21, line_dash="dash", line_color="#FF7F40", annotation_text="Fatigue (21d)")
         fig_life.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='#052623'))
         st.plotly_chart(fig_life, use_container_width=True)
+
+        # --- 4. VINTAGE ---
+        st.markdown("---")
+        st.header("4. Account Health (Vintage)")
+        st.caption("When were the ads created that are driving spend today?")
+        
+        raw_with_birthdays['vintage_month'] = raw_with_birthdays['launch_date'].dt.to_period('M').astype(str)
+        vintage_analysis = raw_with_birthdays.groupby(['week_start', 'vintage_month'])[spend_col].sum().reset_index().sort_values('vintage_month')
+        
+        fig_vintage = px.area(vintage_analysis, x='week_start', y=spend_col, color='vintage_month', title="Spend Layered by Launch Month", labels={spend_col: 'Spend'})
+        fig_vintage.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='#052623'))
+        st.plotly_chart(fig_vintage, use_container_width=True)
 
         # --- DOWNLOAD ---
         csv = analysis_df.to_csv(index=False).encode('utf-8')
