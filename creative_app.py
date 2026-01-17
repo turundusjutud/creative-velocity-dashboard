@@ -273,12 +273,12 @@ if uploaded_file is not None:
 
         # --- 3. LIFECYCLE ---
         st.markdown("---")
-        st.header("3. The Decay Curve (Lifecycle)")
+        st.header("3. The Decay Curve")
         st.markdown("""
         **What am I looking at?** This chart shows the average performance of an ad on Day 1, Day 2, Day 3, etc.
         
         **Why 21 Days?** We mark Day 21 (Red line) because in modern paid social, most creatives "fatigue" or lose efficiency after 3 weeks. 
-        * If the line drops/spikes *before* the red line, your ads are fatiguing fast.
+        * If the line drops *before* the red line, your ads are fatiguing faster.
         * If the line stays flat *after* the red line, you have strong "Evergreen" content.
         """)
         
@@ -292,7 +292,7 @@ if uploaded_file is not None:
         
         life_df = life_df[life_df['age'] <= 60]
         
-        fig_life = px.line(life_df, x='age', y='y', title=f"{s2_choice} by Day Since Launch", markers=True)
+        fig_life = px.line(life_df, x='age', y='y', title=f"{s2_choice} by Day Since Launch", markers=True, labels={"age": "Days Since Launch", "y": f"Average {s2_choice}"})
         fig_life.update_traces(line_color='#052623')
         fig_life.add_vline(x=21, line_dash="dash", line_color="#FF7F40", annotation_text="Fatigue (21d)")
         fig_life.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='#052623'))
