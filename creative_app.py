@@ -303,10 +303,6 @@ if uploaded_file is not None:
             data_during, data_after = raw_df[mask_during], raw_df[mask_after]
             if not data_during.empty and not data_after.empty:
                 metric_to_check = f"Cost Per {main_conv_name}"
-                def safe_calc(d, m):
-                    if m == 'CPA' and d[installs_col].sum() > 0: return d[spend_col].sum() / d[installs_col].sum()
-                    if m == 'CPM' and d[imps_col].sum() > 0: return (d[spend_col].sum() / d[imps_col].sum()) * 1000
-                    return 0
                 
                 # Manual Check based on available columns
                 def get_cost_per_main(d):
@@ -437,9 +433,8 @@ if uploaded_file is not None:
         vintage_spend = bucket_spend[bucket_spend['Dynamic_Age_Bucket'].str.contains('Vintage|Legacy', regex=True)]['% Spend'].sum()
         new_spend = bucket_spend[bucket_spend['Dynamic_Age_Bucket'].str.contains('New', regex=True)]['% Spend'].sum()
         
-        txt_age = f"💡 <b>Analyst Note:</b>"
-        
         # IMPROVED LOGIC
+        txt_age = f"💡 <b>Analyst Note:</b>"
         if vintage_spend > 50: 
             txt_age += f" <b>Zombie Alert:</b> {vintage_spend:.1f}% of spend is on ads older than 6 months. This is risky; you rely too much on legacy winners."
         elif new_spend > 60: 
@@ -536,28 +531,35 @@ if uploaded_file is not None:
                         max_drop_val = abs(change)
                         drop_week = w
 
+        # Advanced Analysis with Multi-Phase Detection
         early = life_df[life_df['absolute_age'] <= 7]['y'].mean()
         mid = life_df[(life_df['absolute_age'] > 14) & (life_df['absolute_age'] <= 28)]['y'].mean()
         late = life_df[(life_df['absolute_age'] > 30) & (life_df['absolute_age'] <= 60)]['y'].mean()
         
         lower_is_better = any(x in decay_choice.upper() for x in ['CPA', 'CPC', 'CPM', 'COST', 'CP_'])
-        analysis_txt = f"💡 <b>Curve Analysis for {decay_choice}:</b><br>"
+        analysis_txt = f"💡 <b>Deep Dive Analysis for {decay_choice}:</b><br>"
         
+        events = []
         if pd.notnull(early) and pd.notnull(mid) and early != 0:
             early_change = ((mid - early) / early) * 100
-            is_early_bad = (early_change > 15) if lower_is_better else (early_change < -15)
-            if is_early_bad: analysis_txt += f"• <b>Early Crash:</b> Performance degrades by <b>{abs(early_change):.1f}%</b> in the first month.<br>"
-            else: analysis_txt += f"• <b>Solid Start:</b> Stable performance in the first month.<br>"
+            if (early_change > 15 and lower_is_better) or (early_change < -15 and not lower_is_better):
+                events.append(f"⚠️ <b>Early Crash:</b> Performance degrades by <b>{abs(early_change):.1f}%</b> in the first month (Weak Hooks).")
+            else:
+                events.append(f"✅ <b>Solid Start:</b> Stable performance in the first month.")
 
         if pd.notnull(mid) and pd.notnull(late) and mid != 0:
             late_change = ((late - mid) / mid) * 100
-            is_late_bad = (late_change > 10) if lower_is_better else (late_change < -10)
-            if is_late_bad: 
-                analysis_txt += f"• <b>Late Fatigue:</b> Performance worsens by <b>{abs(late_change):.1f}%</b> after Day 30."
+            if (late_change > 10 and lower_is_better) or (late_change < -10 and not lower_is_better):
+                events.append(f"📉 <b>Late Fatigue:</b> Performance worsens by <b>{abs(late_change):.1f}%</b> after Day 30.")
             elif (late_change < -10 and lower_is_better) or (late_change > 10 and not lower_is_better):
-                analysis_txt += f"• <b>Survivor Bias:</b> Metrics improve by <b>{abs(late_change):.1f}%</b> late-stage."
+                events.append(f"💎 <b>Survivor Bonus:</b> Metrics improve by <b>{abs(late_change):.1f}%</b> late-stage (only winners survive).")
             else:
-                analysis_txt += f"• <b>High Endurance:</b> Performance holds steady late-stage."
+                events.append(f"⚓ <b>High Endurance:</b> Performance holds steady late-stage.")
+        
+        if not events:
+            analysis_txt += "• Curve is flat or insufficient data to detect trends."
+        else:
+            analysis_txt += "".join([f"<br>• {e}" for e in events])
 
         st.markdown(f"<div class='insight-box'>{analysis_txt}</div>", unsafe_allow_html=True)
         st.plotly_chart(px.line(life_df, x='absolute_age', y='y', title=f"{decay_choice} by Day", markers=True).add_vline(x=drop_week, line_dash="dash", line_color="#FF7F40", annotation_text=f"Max Drop (Day {drop_week})").update_traces(line_color='#052623'), config={'displayModeBar': False, 'responsive': True})
@@ -577,16 +579,31 @@ if uploaded_file is not None:
         
         ret_data = []
         for t in range(61):
-            pct = (len(creative_agg[creative_agg['lifespan_days'] >= t])/len(creative_agg))*100 if len(creative_agg) > 0 else 0
+            pct = (len(creative_agg[creative_agg['lifespan_days'] >= t]) / len(creative_agg)) * 100 if len(creative_agg) > 0 else 0
             ret_data.append({'Day': t, '%': pct})
         ret_df = pd.DataFrame(ret_data)
         st.plotly_chart(px.line(ret_df, x='Day', y='%', title="Survival Curve").update_traces(line_color='#1A776F', fill='tozeroy'), config={'displayModeBar': False, 'responsive': True})
 
+        # Lifecycle Analysis
         day_7 = ret_df[ret_df['Day'] == 7]['%'].values[0] if not ret_df.empty else 0
-        txt_ret = f"💡 <b>Analyst Note:</b> By Day 7, <b>{day_7:.1f}%</b> of your creatives are still running."
-        if day_7 < 30: txt_ret += " This indicates a <b>Fail Fast</b> strategy (High Churn)."
-        elif day_7 > 50: txt_ret += " This indicates <b>Strong Retention</b>."
-        else: txt_ret += " ⚖️ <b>Normal Churn:</b> Your retention is average."
+        day_30 = ret_df[ret_df['Day'] == 30]['%'].values[0] if not ret_df.empty else 0
+        day_60 = ret_df[ret_df['Day'] == 60]['%'].values[0] if not ret_df.empty else 0
+        
+        # Half Life
+        half_life = "60+"
+        under_50 = ret_df[ret_df['%'] < 50]
+        if not under_50.empty: half_life = int(under_50.iloc[0]['Day'])
+        
+        txt_ret = f"💡 <b>Deep Dive Analysis:</b><br>"
+        txt_ret += f"• <b>Creative Half-Life:</b> It takes <b>{half_life} days</b> for 50% of your ads to be turned off.<br>"
+        
+        # Churn Analysis
+        if day_7 < 30: txt_ret += f"• <b>Fast Churn:</b> <b>{100-day_7:.1f}%</b> of ads fail in week 1. You are testing aggressively.<br>"
+        else: txt_ret += f"• <b>High Retention:</b> <b>{day_7:.1f}%</b> survive past week 1. Your creative quality is consistent.<br>"
+        
+        # Legacy Analysis
+        if day_60 > 10: txt_ret += f"• <b>Legacy Builders:</b> <b>{day_60:.1f}%</b> of ads make it to 2 months. You have strong evergreen concepts."
+        else: txt_ret += f"• <b>Short-Term Focus:</b> Almost no ads survive to 2 months. You rely on constant new launches."
         
         st.markdown(f"<div class='insight-box'>{txt_ret}</div>", unsafe_allow_html=True)
 
@@ -600,13 +617,13 @@ if uploaded_file is not None:
             score += 1
             good.append(f"<b>High Velocity:</b> Launches every {avg_launch_gap:.1f} days.")
         else:
-            bad.append("<b>Low Velocity:</b> Launches are too rare.")
+            bad.append(f"<b>Low Velocity:</b> Launches are too rare ({avg_launch_gap:.1f} days). Target: <7 days.")
             
         if 'win_pct' in locals() and win_pct >= 20:
             score += 1
             good.append(f"<b>High Quality:</b> {win_pct:.1f}% win rate.")
         else:
-            bad.append("<b>Low Quality:</b> High creative failure rate.")
+            bad.append(f"<b>Low Quality:</b> Win rate is {win_pct:.1f}% (Target: >20%).")
             
         if not delta_df.empty:
             best_m = delta_df.sort_values('Delta %', key=abs, ascending=False).iloc[0]
