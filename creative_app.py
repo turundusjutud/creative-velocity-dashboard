@@ -257,9 +257,19 @@ if uploaded_file is not None:
         c2.metric("Avg Days Between Launches", f"{avg_launch_gap:.1f} days", help=tooltips['avg_gap'])
         c3.metric("Longest Drought", f"{max_launch_gap:.0f} days", help=tooltips['drought'])
         
-        # IMPROVED STABILITY WARNING
+        # New "Always On" Analyst Note for Rhythm
+        txt_rhythm = f"💡 <b>Analyst Note:</b> Your average launch gap is <b>{avg_launch_gap:.1f} days</b>."
+        if avg_launch_gap <= 7:
+            txt_rhythm += " 🏆 <b>Elite Consistency:</b> You are launching weekly. This is the #1 driver of account growth."
+        elif avg_launch_gap <= 14:
+            txt_rhythm += " ✅ <b>Good Rhythm:</b> Launching every two weeks is a healthy, sustainable cadence."
+        else:
+            txt_rhythm += " ⚠️ <b>Inconsistent:</b> Irregular testing gaps make performance unpredictable. Try to launch at least every 14 days."
+        
         if max_launch_gap > 30:
             st.warning(f"⚠️ Stability Risk: You went {max_launch_gap:.0f} days without launching a single ad. \n\n**Why this matters:** Ad performance naturally decays over time. If you pause testing for too long, you have no new winners to replace the dying ones, leading to a sudden performance crash. \n\n**Target State:** Aim to launch at least one new test batch every 7 days.")
+        
+        st.markdown(f"<div class='insight-box'>{txt_rhythm}</div>", unsafe_allow_html=True)
 
         # --- 2. COMPOSITION ---
         st.markdown("---")
@@ -292,26 +302,28 @@ if uploaded_file is not None:
             mask_after = (raw_df[date_col] >= drought_end) & (raw_df[date_col] <= (drought_end + pd.Timedelta(days=14)))
             data_during, data_after = raw_df[mask_during], raw_df[mask_after]
             if not data_during.empty and not data_after.empty:
-                # Use the detected main conversion metric
                 metric_to_check = f"Cost Per {main_conv_name}"
+                def safe_calc(d, m):
+                    if m == 'CPA' and d[installs_col].sum() > 0: return d[spend_col].sum() / d[installs_col].sum()
+                    if m == 'CPM' and d[imps_col].sum() > 0: return (d[spend_col].sum() / d[imps_col].sum()) * 1000
+                    return 0
                 
-                # Helper to calc cost per main conversion
-                def calc_main_cpa(d):
-                    conversions = 0
-                    if installs_col: conversions = d[installs_col].sum()
-                    elif value_col: conversions = (d[value_col].sum() > 0) # Fallback if only revenue
-                    elif len(extra_metrics) > 0: conversions = d[extra_metrics[0]].sum()
-                    
-                    if conversions > 0: return d[spend_col].sum() / conversions
+                # Manual Check based on available columns
+                def get_cost_per_main(d):
+                    convs = 0
+                    if installs_col: convs = d[installs_col].sum()
+                    elif value_col: convs = d[value_col].sum() > 0
+                    elif len(extra_metrics) > 0: convs = d[extra_metrics[0]].sum()
+                    if convs > 0: return d[spend_col].sum() / convs
                     return 0
 
-                val_d = calc_main_cpa(data_during)
-                val_a = calc_main_cpa(data_after)
+                val_d = get_cost_per_main(data_during)
+                val_a = get_cost_per_main(data_after)
                 
                 if val_d > 0:
                     diff_pct = ((val_a - val_d) / val_d) * 100
                     direction = "improved (dropped)" if diff_pct < 0 else "worsened (increased)"
-                    drought_msg = f"<br>⚠️ <b>Drought Analysis:</b> During the drought ({drought_start.strftime('%b %d')} - {drought_end.strftime('%b %d')}), your <b>Cost Per {main_conv_name}</b> was <b>{val_d:.2f}</b>. After launches resumed, it <b>{direction} by {abs(diff_pct):.1f}%</b> to <b>{val_a:.2f}</b>."
+                    drought_msg = f"<br>⚠️ <b>Drought Analysis:</b> During the drought ({drought_start.strftime('%b %d')} - {drought_end.strftime('%b %d')}), your <b>{metric_to_check}</b> was <b>{val_d:.2f}</b>. After launches resumed, it <b>{direction} by {abs(diff_pct):.1f}%</b> to <b>{val_a:.2f}</b>."
         
         st.markdown(f"<div class='insight-box'>💡 <b>Analyst Note:</b> Over the selected period, <b>{fresh_spend_share:.1f}%</b> of your total spend went to Fresh ads. {drought_msg}</div>", unsafe_allow_html=True)
 
@@ -339,10 +351,14 @@ if uploaded_file is not None:
             fig_corr.add_vline(x=0, line_width=1, line_color="black")
             st.plotly_chart(fig_corr, config={'displayModeBar': False, 'responsive': True})
             
-            # Added Insight for Section 3
+            # New "Always On" Velocity Insight
             best_corr = corr_df[corr_df['Impact'] == 'Good'].iloc[0] if not corr_df[corr_df['Impact'] == 'Good'].empty else None
-            if best_corr is not None:
-                st.markdown(f"<div class='insight-box'>💡 <b>Velocity Insight:</b> Increasing launch velocity has the strongest positive impact on <b>{best_corr['Metric']}</b> (Correlation: {best_corr['Correlation']:.2f}).</div>", unsafe_allow_html=True)
+            txt_vel = "💡 <b>Analyst Note:</b> "
+            if best_corr is not None and abs(best_corr['Correlation']) > 0.3:
+                txt_vel += f"Velocity is a strong lever for <b>{best_corr['Metric']}</b> (Corr: {best_corr['Correlation']:.2f}). Launching more ads tends to improve it."
+            else:
+                txt_vel += "⚖️ <b>Velocity Neutral:</b> Increasing launch volume doesn't drastically swing your metrics right now. Your account is stable."
+            st.markdown(f"<div class='insight-box'>{txt_vel}</div>", unsafe_allow_html=True)
         
         st.subheader("Deep Dive")
         vel_metric_choice = st.selectbox("Select Metric to Visualize:", available_metrics, index=0)
@@ -374,14 +390,14 @@ if uploaded_file is not None:
                     d_col = "inverse" if lower else "normal"
                     with cols[j]: st.metric(label=m, value=f"{av:,.2f}", delta=f"{diff:+.1f}% vs Quiet", delta_color=d_col)
             
-            # Dynamic Conclusion
-            main_cost_metric = f"Cost Per {main_conv_name}" if f"Cost Per {main_conv_name}" in available_metrics else 'CPA'
-            if main_cost_metric not in available_metrics: main_cost_metric = 'CPM' # Fallback
-            
-            if act_row[main_cost_metric] > 0:
-                diff_m = ((quiet_row[main_cost_metric] - act_row[main_cost_metric]) / act_row[main_cost_metric]) * 100
-                msg = f"📉 <b>The Price of Silence:</b> When you stop launching, your <b>{main_cost_metric}</b> increases by <b>{diff_m:.1f}%</b>." if quiet_row[main_cost_metric] > act_row[main_cost_metric] else f"⚖️ <b>Stability:</b> Your {main_cost_metric} remains stable during quiet weeks."
-                st.markdown(f"<div class='insight-box'>{msg}</div>", unsafe_allow_html=True)
+            main_cost_metric = f"Cost Per {main_conv_name}" if f"Cost Per {main_conv_name}" in available_metrics else 'CPM'
+            if main_cost_metric in available_metrics:
+                act_m = act_row[main_cost_metric]
+                quiet_m = quiet_row[main_cost_metric]
+                if act_m > 0:
+                    diff_m = ((quiet_m - act_m) / act_m) * 100
+                    msg = f"📉 <b>The Price of Silence:</b> When you stop launching, your <b>{main_cost_metric}</b> increases by <b>{diff_m:.1f}%</b>." if quiet_m > act_m else f"⚖️ <b>Stability:</b> Your {main_cost_metric} remains stable during quiet weeks."
+                    st.markdown(f"<div class='insight-box'>{msg}</div>", unsafe_allow_html=True)
 
         # --- 5. WINNING CREATIVES ---
         st.markdown("---")
@@ -398,9 +414,8 @@ if uploaded_file is not None:
             c1.metric("Total Ads", total_ads)
             c2.metric("Winners", f"{len(winners)} ({win_pct:.1f}%)", help=tooltips['winning_creatives'])
             
-            # RESTORED SLOP PERCENTAGE with COLOR
-            slop_delta_color = "inverse" # Red is bad (high slop)
-            c3.metric("Slop", f"{len(slop)}", delta=f"{slop_pct:.1f}% Rate", delta_color=slop_delta_color, help="Percentage of ads that failed to launch.")
+            slop_delta_color = "inverse" # Red if high
+            c3.metric("Slop", f"{len(slop)}", delta=f"{slop_pct:.1f}% Rate", delta_color=slop_delta_color, help=tooltips['slop'])
             
             txt = f"💡 <b>Analyst Note:</b> Your Win Rate is {win_pct:.1f}%."
             txt += " High failure rate." if win_pct < 10 else " Efficient testing." if win_pct > 30 else ""
@@ -421,17 +436,15 @@ if uploaded_file is not None:
 
         vintage_spend = bucket_spend[bucket_spend['Dynamic_Age_Bucket'].str.contains('Vintage|Legacy', regex=True)]['% Spend'].sum()
         new_spend = bucket_spend[bucket_spend['Dynamic_Age_Bucket'].str.contains('New', regex=True)]['% Spend'].sum()
-        
-        # Enhanced Assessment
         txt_age = f"💡 <b>Analyst Note:</b>"
-        if vintage_spend > 50: txt_age += f" <b>Zombie Alert:</b> {vintage_spend:.1f}% of spend is on ads older than 6 months. This is risky."
+        if vintage_spend > 50: txt_age += f" <b>Zombie Alert:</b> {vintage_spend:.1f}% of spend is on ads older than 6 months."
         elif new_spend > 60: txt_age += f" <b>Heavy Testing:</b> {new_spend:.1f}% of spend is on New ads (<1mo)."
         else: txt_age += f" <b>Portfolio is Balanced:</b> You have a healthy mix of New Ads ({new_spend:.1f}% for testing) and Vintage Ads ({vintage_spend:.1f}% for stability). Ideal target is ~20% New / ~60% Vintage."
         st.markdown(f"<div class='insight-box'>{txt_age}</div>", unsafe_allow_html=True)
 
-        # --- 7. OLD VS NEW (SIMPSON'S PARADOX) ---
+        # --- 7. OLD VS NEW ---
         st.markdown("---")
-        st.header("7. Performance: Old vs. New")
+        st.header("7. Performance: Old vs. New (Simpson's Paradox)")
         fresh_grp = raw_w_launch.groupby('Freshness')[numeric_cols_all].sum().reset_index()
         
         def get_val(df, m):
@@ -461,7 +474,6 @@ if uploaded_file is not None:
         delta_df = pd.DataFrame(deltas)
         st.dataframe(delta_df.style.format({'Fresh': '{:.2f}', 'Fatigued': '{:.2f}', 'Delta %': '{:+.1f}%'}).apply(lambda x: [color_delta(v, delta_df.iloc[i]['Metric']) for i, v in enumerate(x)], subset=['Delta %'], axis=0).set_table_styles([dict(selector="th", props=[("text-align", "center")]), dict(selector="td", props=[("text-align", "center")])]), use_container_width=True)
 
-        # PARADOX EXPLANATION
         st.markdown("""
         <div class='insight-box'>
             💡 <b>The "Simpson's Paradox" Explained:</b> You might see that launching new ads improves overall account performance (Section 3), yet this table shows that "Fresh" ads perform worse than "Fatigued" ads.
@@ -470,19 +482,20 @@ if uploaded_file is not None:
         </div>
         """, unsafe_allow_html=True)
         
-        # Enhanced Hidden Insights (Show ALL, not just one)
+        # Enhanced Hidden Insights (Always On)
         if not delta_df.empty:
             delta_df['Abs_Delta'] = delta_df['Delta %'].abs()
-            sig_devs = delta_df[delta_df['Abs_Delta'] > 20] # Show anything with >20% diff
+            sig_devs = delta_df[delta_df['Abs_Delta'] > 20]
             
+            insights_list = []
             if not sig_devs.empty:
-                insights_list = []
                 for _, row in sig_devs.iterrows():
                     is_cost = any(x in row['Metric'].upper() for x in ['CPA','COST','CPC','CPM'])
                     direction = "better" if (row['Delta %'] < 0 and is_cost) or (row['Delta %'] > 0 and not is_cost) else "worse"
                     insights_list.append(f"<li><b>{row['Metric']}</b> is <b>{abs(row['Delta %']):.1f}% {direction}</b> on fresh ads.</li>")
-                
                 st.markdown(f"<div class='insight-box'>👀 <b>Hidden Insights (Significant Deviations):</b><ul>{''.join(insights_list)}</ul></div>", unsafe_allow_html=True)
+            else:
+                st.markdown("<div class='insight-box'>✅ <b>Consistent Quality:</b> Fresh ads perform similarly to old ads across all metrics. No hidden volatility detected.</div>", unsafe_allow_html=True)
 
         ovn_metric_choice = st.selectbox("Compare Metric:", available_metrics, index=0, key="ovn_select")
         eff_comp = raw_w_launch.groupby('Freshness')[numeric_cols_all].sum().reset_index()
@@ -498,7 +511,7 @@ if uploaded_file is not None:
         life_df['y'] = life_df.apply(lambda r: float(get_val(pd.DataFrame([r]), decay_choice)), axis=1)
         life_df = life_df[life_df['absolute_age'] <= 60]
         
-        # Max Drop Logic (Steepest Decline)
+        # Max Drop Logic
         drop_week = 21
         max_drop_val = 0
         if len(life_df) > 28:
@@ -512,7 +525,6 @@ if uploaded_file is not None:
                         max_drop_val = abs(change)
                         drop_week = w
 
-        # Advanced Analysis
         early = life_df[life_df['absolute_age'] <= 7]['y'].mean()
         mid = life_df[(life_df['absolute_age'] > 14) & (life_df['absolute_age'] <= 28)]['y'].mean()
         late = life_df[(life_df['absolute_age'] > 30) & (life_df['absolute_age'] <= 60)]['y'].mean()
@@ -520,26 +532,21 @@ if uploaded_file is not None:
         lower_is_better = any(x in decay_choice.upper() for x in ['CPA', 'CPC', 'CPM', 'COST', 'CP_'])
         analysis_txt = f"💡 <b>Curve Analysis for {decay_choice}:</b><br>"
         
-        # Check for Flatline (Insufficient Data)
-        if life_df['y'].std() == 0 or len(life_df) < 5:
-             analysis_txt += "• <b>Insufficient Data:</b> The curve is flat or incomplete. Try selecting a higher-volume metric like CPM or CTR."
-        else:
-            if pd.notnull(early) and pd.notnull(mid) and early != 0:
-                early_change = ((mid - early) / early) * 100
-                is_early_bad = (early_change > 15) if lower_is_better else (early_change < -15)
-                if is_early_bad: analysis_txt += f"• <b>Early Crash:</b> Performance degrades by <b>{abs(early_change):.1f}%</b> in the first month.<br>"
-                else: analysis_txt += f"• <b>Solid Start:</b> Stable performance in the first month.<br>"
+        if pd.notnull(early) and pd.notnull(mid) and early != 0:
+            early_change = ((mid - early) / early) * 100
+            is_early_bad = (early_change > 15) if lower_is_better else (early_change < -15)
+            if is_early_bad: analysis_txt += f"• <b>Early Crash:</b> Performance degrades by <b>{abs(early_change):.1f}%</b> in the first month.<br>"
+            else: analysis_txt += f"• <b>Solid Start:</b> Stable performance in the first month.<br>"
 
-            if pd.notnull(mid) and pd.notnull(late) and mid != 0:
-                late_change = ((late - mid) / mid) * 100
-                is_late_bad = (late_change > 10) if lower_is_better else (late_change < -10)
-                if is_late_bad: 
-                    analysis_txt += f"• <b>Late Fatigue:</b> Performance worsens by <b>{abs(late_change):.1f}%</b> after Day 30."
-                    if lower_is_better and "CPM" in decay_choice: analysis_txt += " (Audience Saturation Likely)."
-                elif (late_change < -10 and lower_is_better) or (late_change > 10 and not lower_is_better):
-                    analysis_txt += f"• <b>Survivor Bias:</b> Metrics improve by <b>{abs(late_change):.1f}%</b> late-stage."
-                else:
-                    analysis_txt += f"• <b>High Endurance:</b> Performance holds steady late-stage."
+        if pd.notnull(mid) and pd.notnull(late) and mid != 0:
+            late_change = ((late - mid) / mid) * 100
+            is_late_bad = (late_change > 10) if lower_is_better else (late_change < -10)
+            if is_late_bad: 
+                analysis_txt += f"• <b>Late Fatigue:</b> Performance worsens by <b>{abs(late_change):.1f}%</b> after Day 30."
+            elif (late_change < -10 and lower_is_better) or (late_change > 10 and not lower_is_better):
+                analysis_txt += f"• <b>Survivor Bias:</b> Metrics improve by <b>{abs(late_change):.1f}%</b> late-stage."
+            else:
+                analysis_txt += f"• <b>High Endurance:</b> Performance holds steady late-stage."
 
         st.markdown(f"<div class='insight-box'>{analysis_txt}</div>", unsafe_allow_html=True)
         st.plotly_chart(px.line(life_df, x='absolute_age', y='y', title=f"{decay_choice} by Day", markers=True).add_vline(x=drop_week, line_dash="dash", line_color="#FF7F40", annotation_text=f"Max Drop (Day {drop_week})").update_traces(line_color='#052623'), config={'displayModeBar': False, 'responsive': True})
@@ -559,17 +566,16 @@ if uploaded_file is not None:
         
         ret_data = []
         for t in range(61):
-            pct = (len(creative_agg[creative_agg['lifespan_days'] >= t]) / len(creative_agg)) * 100 if len(creative_agg) > 0 else 0
+            pct = (len(creative_agg[creative_agg['lifespan_days'] >= t])/len(creative_agg))*100 if len(creative_agg) > 0 else 0
             ret_data.append({'Day': t, '%': pct})
-        st.plotly_chart(px.line(pd.DataFrame(ret_data), x='Day', y='%', title="Survival Curve").update_traces(line_color='#1A776F', fill='tozeroy'), config={'displayModeBar': False, 'responsive': True})
+        ret_df = pd.DataFrame(ret_data)
+        st.plotly_chart(px.line(ret_df, x='Day', y='%', title="Survival Curve").update_traces(line_color='#1A776F', fill='tozeroy'), config={'displayModeBar': False, 'responsive': True})
 
-        # Retention Insights
-        day_7 = ret_data[7]['%'] if len(ret_data) > 7 else 0
-        day_30 = ret_data[30]['%'] if len(ret_data) > 30 else 0
-        
+        day_7 = ret_df[ret_df['Day'] == 7]['%'].values[0] if not ret_df.empty else 0
         txt_ret = f"💡 <b>Analyst Note:</b> By Day 7, <b>{day_7:.1f}%</b> of your creatives are still running."
         if day_7 < 30: txt_ret += " This indicates a <b>Fail Fast</b> strategy (High Churn)."
         elif day_7 > 50: txt_ret += " This indicates <b>Strong Retention</b>."
+        else: txt_ret += " ⚖️ <b>Normal Churn:</b> Your retention is average."
         
         st.markdown(f"<div class='insight-box'>{txt_ret}</div>", unsafe_allow_html=True)
 
@@ -583,13 +589,13 @@ if uploaded_file is not None:
             score += 1
             good.append(f"<b>High Velocity:</b> Launches every {avg_launch_gap:.1f} days.")
         else:
-            bad.append(f"<b>Low Velocity:</b> Launches are too rare ({avg_launch_gap:.1f} days). Target: <7 days.")
+            bad.append("<b>Low Velocity:</b> Launches are too rare.")
             
         if 'win_pct' in locals() and win_pct >= 20:
             score += 1
             good.append(f"<b>High Quality:</b> {win_pct:.1f}% win rate.")
         else:
-            bad.append(f"<b>Low Quality:</b> Win rate is {win_pct:.1f}% (Target: >20%).")
+            bad.append("<b>Low Quality:</b> High creative failure rate.")
             
         if not delta_df.empty:
             best_m = delta_df.sort_values('Delta %', key=abs, ascending=False).iloc[0]
