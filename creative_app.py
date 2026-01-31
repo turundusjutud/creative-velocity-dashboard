@@ -436,10 +436,21 @@ if uploaded_file is not None:
 
         vintage_spend = bucket_spend[bucket_spend['Dynamic_Age_Bucket'].str.contains('Vintage|Legacy', regex=True)]['% Spend'].sum()
         new_spend = bucket_spend[bucket_spend['Dynamic_Age_Bucket'].str.contains('New', regex=True)]['% Spend'].sum()
+        
         txt_age = f"💡 <b>Analyst Note:</b>"
-        if vintage_spend > 50: txt_age += f" <b>Zombie Alert:</b> {vintage_spend:.1f}% of spend is on ads older than 6 months."
-        elif new_spend > 60: txt_age += f" <b>Heavy Testing:</b> {new_spend:.1f}% of spend is on New ads (<1mo)."
-        else: txt_age += f" <b>Portfolio is Balanced:</b> You have a healthy mix of New Ads ({new_spend:.1f}% for testing) and Vintage Ads ({vintage_spend:.1f}% for stability). Ideal target is ~20% New / ~60% Vintage."
+        
+        # IMPROVED LOGIC
+        if vintage_spend > 50: 
+            txt_age += f" <b>Zombie Alert:</b> {vintage_spend:.1f}% of spend is on ads older than 6 months. This is risky; you rely too much on legacy winners."
+        elif new_spend > 60: 
+            txt_age += f" <b>Heavy Testing:</b> {new_spend:.1f}% of spend is on New ads (<1mo). This causes high volatility."
+        elif new_spend > 40: 
+            txt_age += f" <b>Aggressive Rotation:</b> {new_spend:.1f}% of spend is on New ads. This is higher than the ideal 20%, suggesting you are actively fighting creative fatigue or scaling hard."
+        elif vintage_spend < 15:
+            txt_age += f" <b>Low Stability:</b> Only {vintage_spend:.1f}% of spend is on ads >6 months old. You lack long-term 'Evergreen' assets."
+        else: 
+            txt_age += f" <b>Portfolio is Balanced:</b> You have a healthy mix of New Ads ({new_spend:.1f}% for testing) and Vintage Ads ({vintage_spend:.1f}% for stability)."
+            
         st.markdown(f"<div class='insight-box'>{txt_age}</div>", unsafe_allow_html=True)
 
         # --- 7. OLD VS NEW ---
