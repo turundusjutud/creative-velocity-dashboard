@@ -240,6 +240,8 @@ if uploaded_file is not None:
 
         # --- 1. RHYTHM ---
         st.header("1. Creative Pulse & Consistency")
+        st.caption("Are we launching consistently? Consistent launches prevent ad fatigue and keep performance stable.")
+        
         launch_dates = sorted(creative_agg['launch_date'].unique())
         drought_start, drought_end, max_launch_gap = None, None, 0
         if len(launch_dates) > 1:
@@ -274,6 +276,8 @@ if uploaded_file is not None:
         # --- 2. COMPOSITION ---
         st.markdown("---")
         st.header("2. Spend Composition: Fresh vs. Fatigued")
+        st.caption("How much of your budget goes to testing new ideas vs. running old winners?")
+        
         raw_w_launch = pd.merge(raw_df, creative_agg[[ad_id_col, 'launch_date']], on=ad_id_col, how='left')
         raw_w_launch['spend_age_days'] = (raw_w_launch[date_col] - raw_w_launch['launch_date']).dt.days
         raw_w_launch['Freshness'] = raw_w_launch['spend_age_days'].apply(lambda x: 'Fresh (<21d)' if x < 21 else 'Fatigued (>21d)')
@@ -303,8 +307,6 @@ if uploaded_file is not None:
             data_during, data_after = raw_df[mask_during], raw_df[mask_after]
             if not data_during.empty and not data_after.empty:
                 metric_to_check = f"Cost Per {main_conv_name}"
-                
-                # Manual Check based on available columns
                 def get_cost_per_main(d):
                     convs = 0
                     if installs_col: convs = d[installs_col].sum()
@@ -326,8 +328,9 @@ if uploaded_file is not None:
         # --- 3. VELOCITY ---
         st.markdown("---")
         st.header("3. How Velocity Impacts Metrics")
+        st.caption("This matrix helps you understand if launching MORE ads actually helps or hurts your KPIs.")
         c1, c2 = st.columns([2, 1])
-        with c1: st.caption("This matrix ranks which metrics are most sensitive to new launches. Green = Launching helps.")
+        with c1: st.write("")
         with c2: lag_weeks = st.radio("Lag", options=[0, 1, 2, 3, 4, 5, 6, 7, 8], horizontal=True, label_visibility="collapsed", index=1, key="vel_lag")
 
         corr_data = []
@@ -370,6 +373,8 @@ if uploaded_file is not None:
         # --- 4. COST OF INACTION ---
         st.markdown("---")
         st.header("4. The Cost of Inaction")
+        st.caption("We compare weeks where you launched ads vs. weeks where you did nothing to calculate the 'Price of Silence'.")
+        
         valid_vel['Velocity_Bucket'] = valid_vel['lag'].apply(lambda x: 'Active' if x > 0 else 'Quiet')
         impact_grp = valid_vel.groupby('Velocity_Bucket')[available_metrics].mean().reset_index()
         
@@ -398,6 +403,8 @@ if uploaded_file is not None:
         # --- 5. WINNING CREATIVES ---
         st.markdown("---")
         st.header("5. Winning Creatives & Efficiency")
+        st.caption("Are we producing winners or wasting budget on 'Slop'? (Slop = Ads that spent < Threshold).")
+        
         total_ads = len(creative_agg)
         if total_ads > 0:
             winners = creative_agg[creative_agg['lifetime_spend'] >= meaningful_spend]
@@ -421,6 +428,8 @@ if uploaded_file is not None:
         # --- 6. AGE DISTRIBUTION ---
         st.markdown("---")
         st.header("6. Ad Age Distribution")
+        st.caption("What represents your 'Spend Portfolio'? Do you rely on New, Mature, or Vintage ads?")
+        
         raw_w_launch['Dynamic_Age_Bucket'] = raw_w_launch['spend_age_days'].apply(categorize_age)
         bucket_spend = raw_w_launch.groupby('Dynamic_Age_Bucket')[spend_col].sum().reset_index()
         total_spend = bucket_spend[spend_col].sum()
@@ -451,6 +460,8 @@ if uploaded_file is not None:
         # --- 7. OLD VS NEW ---
         st.markdown("---")
         st.header("7. Performance: Old vs. New (Simpson's Paradox)")
+        st.caption("Comparing aggregate performance of new ideas vs. old winners.")
+        
         fresh_grp = raw_w_launch.groupby('Freshness')[numeric_cols_all].sum().reset_index()
         
         def get_val(df, m):
@@ -488,6 +499,11 @@ if uploaded_file is not None:
         </div>
         """, unsafe_allow_html=True)
         
+        ovn_metric_choice = st.selectbox("Compare Metric:", available_metrics, index=0, key="ovn_select")
+        eff_comp = raw_w_launch.groupby('Freshness')[numeric_cols_all].sum().reset_index()
+        eff_comp['val'] = eff_comp.apply(lambda row: float(get_val(pd.DataFrame([row]), ovn_metric_choice)), axis=1)
+        st.plotly_chart(px.bar(eff_comp, x='Freshness', y='val', color='Freshness', title=f"{ovn_metric_choice} Comparison", color_discrete_map={'Fresh (<21d)': '#1A776F', 'Fatigued (>21d)': '#FF7F40'}, text_auto='.2f'), config={'displayModeBar': False, 'responsive': True})
+
         # Enhanced Hidden Insights (Always On)
         if not delta_df.empty:
             delta_df['Abs_Delta'] = delta_df['Delta %'].abs()
@@ -503,15 +519,12 @@ if uploaded_file is not None:
             else:
                 st.markdown("<div class='insight-box'>✅ <b>Consistent Quality:</b> Fresh ads perform similarly to old ads across all metrics. No hidden volatility detected.</div>", unsafe_allow_html=True)
 
-        ovn_metric_choice = st.selectbox("Compare Metric:", available_metrics, index=0, key="ovn_select")
-        eff_comp = raw_w_launch.groupby('Freshness')[numeric_cols_all].sum().reset_index()
-        eff_comp['val'] = eff_comp.apply(lambda row: float(get_val(pd.DataFrame([row]), ovn_metric_choice)), axis=1)
-        st.plotly_chart(px.bar(eff_comp, x='Freshness', y='val', color='Freshness', title=f"{ovn_metric_choice} Comparison", color_discrete_map={'Fresh (<21d)': '#1A776F', 'Fatigued (>21d)': '#FF7F40'}, text_auto='.2f'), config={'displayModeBar': False, 'responsive': True})
-
         # --- 8. DECAY ---
         st.markdown("---")
         st.header("8. The Decay Curve")
+        st.caption("How long until performance drops? Use this to plan when to refresh your ads.")
         decay_choice = st.selectbox("Select Metric:", available_metrics, index=0, key="decay_select")
+        
         raw_w_launch['absolute_age'] = (raw_w_launch[date_col] - raw_w_launch['launch_date']).dt.days
         life_df = raw_w_launch.groupby('absolute_age')[numeric_cols_all].sum().reset_index()
         life_df['y'] = life_df.apply(lambda r: float(get_val(pd.DataFrame([r]), decay_choice)), axis=1)
@@ -531,7 +544,12 @@ if uploaded_file is not None:
                         max_drop_val = abs(change)
                         drop_week = w
 
-        # Advanced Analysis with Multi-Phase Detection
+        # Visuals
+        fig_decay = px.line(life_df, x='absolute_age', y='y', title=f"{decay_choice} by Day", markers=True)
+        fig_decay.add_vline(x=drop_week, line_dash="dash", line_color="#FF7F40", annotation_text=f"Max Drop (Day {drop_week})")
+        fig_decay.update_traces(line_color='#052623')
+        
+        # Advanced Analysis
         early = life_df[life_df['absolute_age'] <= 7]['y'].mean()
         mid = life_df[(life_df['absolute_age'] > 14) & (life_df['absolute_age'] <= 28)]['y'].mean()
         late = life_df[(life_df['absolute_age'] > 30) & (life_df['absolute_age'] <= 60)]['y'].mean()
@@ -539,34 +557,40 @@ if uploaded_file is not None:
         lower_is_better = any(x in decay_choice.upper() for x in ['CPA', 'CPC', 'CPM', 'COST', 'CP_'])
         analysis_txt = f"💡 <b>Deep Dive Analysis for {decay_choice}:</b><br>"
         
-        events = []
-        if pd.notnull(early) and pd.notnull(mid) and early != 0:
-            early_change = ((mid - early) / early) * 100
-            if (early_change > 15 and lower_is_better) or (early_change < -15 and not lower_is_better):
-                events.append(f"⚠️ <b>Early Crash:</b> Performance degrades by <b>{abs(early_change):.1f}%</b> in the first month (Weak Hooks).")
-            else:
-                events.append(f"✅ <b>Solid Start:</b> Stable performance in the first month.")
-
-        if pd.notnull(mid) and pd.notnull(late) and mid != 0:
-            late_change = ((late - mid) / mid) * 100
-            if (late_change > 10 and lower_is_better) or (late_change < -10 and not lower_is_better):
-                events.append(f"📉 <b>Late Fatigue:</b> Performance worsens by <b>{abs(late_change):.1f}%</b> after Day 30.")
-            elif (late_change < -10 and lower_is_better) or (late_change > 10 and not lower_is_better):
-                events.append(f"💎 <b>Survivor Bonus:</b> Metrics improve by <b>{abs(late_change):.1f}%</b> late-stage (only winners survive).")
-            else:
-                events.append(f"⚓ <b>High Endurance:</b> Performance holds steady late-stage.")
-        
-        if not events:
-            analysis_txt += "• Curve is flat or insufficient data to detect trends."
+        # Check for Flatline
+        if life_df['y'].std() == 0 or len(life_df) < 5:
+             analysis_txt += "• <b>Insufficient Data:</b> The curve is flat or incomplete. Try selecting a higher-volume metric like CPM or CTR."
         else:
-            analysis_txt += "".join([f"<br>• {e}" for e in events])
+            analysis_txt += f"• The 🔴 <b>Red Dashed Line</b> marks <b>Day {drop_week}</b>, where we detect the steepest negative performance shift.<br>"
+            
+            if pd.notnull(early) and pd.notnull(mid) and early != 0:
+                early_change = ((mid - early) / early) * 100
+                is_early_bad = (early_change > 15) if lower_is_better else (early_change < -15)
+                if is_early_bad: 
+                    analysis_txt += f"• <b>Early Crash:</b> Performance degrades by <b>{abs(early_change):.1f}%</b> in the first month (Weak Hooks).<br>"
+                    fig_decay.add_annotation(x=4, y=early, text="Early Crash", showarrow=True, arrowhead=1)
+                else: 
+                    analysis_txt += f"• <b>Solid Start:</b> Stable performance in the first month.<br>"
 
+            if pd.notnull(mid) and pd.notnull(late) and mid != 0:
+                late_change = ((late - mid) / mid) * 100
+                is_late_bad = (late_change > 10) if lower_is_better else (late_change < -10)
+                if is_late_bad: 
+                    analysis_txt += f"• <b>Late Fatigue:</b> Performance worsens by <b>{abs(late_change):.1f}%</b> after Day 30."
+                    if lower_is_better and "CPM" in decay_choice: analysis_txt += " (Audience Saturation Likely)."
+                elif (late_change < -10 and lower_is_better) or (late_change > 10 and not lower_is_better):
+                    analysis_txt += f"• <b>Survivor Bias:</b> Metrics improve by <b>{abs(late_change):.1f}%</b> late-stage (only winners survive)."
+                else:
+                    analysis_txt += f"• <b>High Endurance:</b> Performance holds steady late-stage."
+
+        st.plotly_chart(fig_decay, config={'displayModeBar': False, 'responsive': True})
         st.markdown(f"<div class='insight-box'>{analysis_txt}</div>", unsafe_allow_html=True)
-        st.plotly_chart(px.line(life_df, x='absolute_age', y='y', title=f"{decay_choice} by Day", markers=True).add_vline(x=drop_week, line_dash="dash", line_color="#FF7F40", annotation_text=f"Max Drop (Day {drop_week})").update_traces(line_color='#052623'), config={'displayModeBar': False, 'responsive': True})
 
         # --- 9. LIFESPAN ---
         st.markdown("---")
         st.header("9. Lifespan & Retention")
+        st.caption("How fast do we burn through concepts? The 'Half-Life' is when 50% of ads are paused.")
+        
         avg_lifespan = creative_agg['lifespan_days'].mean()
         winners_agg = creative_agg[creative_agg['lifetime_spend'] >= meaningful_spend]
         avg_lifespan_winners = winners_agg['lifespan_days'].mean() if not winners_agg.empty else 0
@@ -579,29 +603,32 @@ if uploaded_file is not None:
         
         ret_data = []
         for t in range(61):
-            pct = (len(creative_agg[creative_agg['lifespan_days'] >= t]) / len(creative_agg)) * 100 if len(creative_agg) > 0 else 0
+            pct = (len(creative_agg[creative_agg['lifespan_days'] >= t])/len(creative_agg))*100 if len(creative_agg) > 0 else 0
             ret_data.append({'Day': t, '%': pct})
         ret_df = pd.DataFrame(ret_data)
-        st.plotly_chart(px.line(ret_df, x='Day', y='%', title="Survival Curve").update_traces(line_color='#1A776F', fill='tozeroy'), config={'displayModeBar': False, 'responsive': True})
-
-        # Lifecycle Analysis
-        day_7 = ret_df[ret_df['Day'] == 7]['%'].values[0] if not ret_df.empty else 0
-        day_30 = ret_df[ret_df['Day'] == 30]['%'].values[0] if not ret_df.empty else 0
-        day_60 = ret_df[ret_df['Day'] == 60]['%'].values[0] if not ret_df.empty else 0
         
-        # Half Life
+        # Calculate Half-Life
         half_life = "60+"
         under_50 = ret_df[ret_df['%'] < 50]
         if not under_50.empty: half_life = int(under_50.iloc[0]['Day'])
         
+        fig_ret = px.line(ret_df, x='Day', y='%', title="Survival Curve").update_traces(line_color='#1A776F', fill='tozeroy')
+        fig_ret.add_vline(x=7, line_dash="dash", line_color="#FF7F40", annotation_text="Day 7 Check")
+        if isinstance(half_life, int):
+            fig_ret.add_vline(x=half_life, line_dash="dot", line_color="purple", annotation_text=f"Half-Life ({half_life}d)")
+            
+        st.plotly_chart(fig_ret, config={'displayModeBar': False, 'responsive': True})
+
+        # Retention Insights
+        day_7 = ret_df[ret_df['Day'] == 7]['%'].values[0] if not ret_df.empty else 0
+        day_60 = ret_df[ret_df['Day'] == 60]['%'].values[0] if not ret_df.empty else 0
+        
         txt_ret = f"💡 <b>Deep Dive Analysis:</b><br>"
-        txt_ret += f"• <b>Creative Half-Life:</b> It takes <b>{half_life} days</b> for 50% of your ads to be turned off.<br>"
+        txt_ret += f"• <b>Creative Half-Life:</b> It takes <b>{half_life} days</b> for 50% of your ads to be turned off (Purple Line).<br>"
         
-        # Churn Analysis
-        if day_7 < 30: txt_ret += f"• <b>Fast Churn:</b> <b>{100-day_7:.1f}%</b> of ads fail in week 1. You are testing aggressively.<br>"
-        else: txt_ret += f"• <b>High Retention:</b> <b>{day_7:.1f}%</b> survive past week 1. Your creative quality is consistent.<br>"
+        if day_7 < 30: txt_ret += f"• <b>Fast Churn:</b> <b>{100-day_7:.1f}%</b> of ads fail in week 1 (Orange Line). You are testing aggressively.<br>"
+        else: txt_ret += f"• <b>High Retention:</b> <b>{day_7:.1f}%</b> of ads survive past week 1. Your creative quality is consistent.<br>"
         
-        # Legacy Analysis
         if day_60 > 10: txt_ret += f"• <b>Legacy Builders:</b> <b>{day_60:.1f}%</b> of ads make it to 2 months. You have strong evergreen concepts."
         else: txt_ret += f"• <b>Short-Term Focus:</b> Almost no ads survive to 2 months. You rely on constant new launches."
         
@@ -610,6 +637,8 @@ if uploaded_file is not None:
         # --- 10. EXECUTIVE SUMMARY ---
         st.markdown("---")
         st.header("10. Executive Summary & Report Card")
+        st.caption("A high-level strategic review for the Ad Specialist.")
+        
         score = 0
         good, bad = [], []
         
