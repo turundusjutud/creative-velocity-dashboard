@@ -6,186 +6,182 @@ import numpy as np
 
 # --- PAGE CONFIG ---
 st.set_page_config(
-    page_title="Creative Analytics Dashboard", 
-    page_icon="📊",
+    page_title="Creative Velocity Dashboard", 
+    page_icon="🚀",
     layout="wide"
 )
 
 # --- CUSTOM BRANDING CSS ---
 st.markdown("""
     <style>
-        /* 1. Main Layout & Colors */
-        .stApp {
-            background-color: #FAFAFA;
-            color: #052623;
-        }
+        .stApp { background-color: #FAFAFA; color: #052623; }
+        p, div, label, span, li { color: #052623; font-family: 'Helvetica', 'Arial', sans-serif; }
+        h1, h2, h3, h4 { color: #052623 !important; font-weight: 700; }
         
-        p, div, label, span, li {
-            color: #052623;
-            font-family: 'Helvetica', 'Arial', sans-serif;
-        }
-        
-        /* 2. Headings */
-        h1, h2, h3, h4 {
-            color: #052623 !important;
-            font-weight: 700;
-        }
-        
-        /* 3. Metric Cards */
+        /* Metric Cards */
         div[data-testid="stMetric"] {
-            background-color: #FFFFFF;
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-            border: 1px solid #E5E7EB;
-            border-left: 5px solid #1A776F; /* Brand Teal */
+            background-color: #FFFFFF; padding: 15px; border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05); border: 1px solid #E5E7EB;
+            border-left: 5px solid #1A776F;
         }
-        div[data-testid="stMetric"] label {
-            color: #1A776F !important;
+        
+        /* Analyst Note Box */
+        .insight-box {
+            background-color: #E6FFFA; border-left: 4px solid #1A776F;
+            padding: 15px; margin-top: 10px; margin-bottom: 10px; border-radius: 4px;
+            font-size: 1.05em; line-height: 1.6;
         }
-        div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
-            color: #052623 !important;
+        
+        /* Summary Box */
+        .summary-box { padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        .good-job { background-color: #F0FDFA; border: 1px solid #1A776F; }
+        .bad-job { background-color: #FFF7ED; border: 1px solid #FF7F40; }
+        
+        /* Educational Box */
+        .edu-box {
+            background-color: #F4F4F5; border: 1px solid #E4E4E7;
+            padding: 10px; border-radius: 5px; font-size: 0.9em; color: #52525B;
+            margin-bottom: 10px;
         }
 
-        /* 4. Buttons */
-        div.stButton > button {
-            background-color: #FF7F40;
-            color: white !important;
-            border-radius: 8px;
-            border: none;
-            font-weight: bold;
-        }
-        div.stButton > button:hover {
-            background-color: #E66A2E;
-            color: white !important;
-        }
+        .dataframe { text-align: center !important; }
+        th { text-align: center !important; }
         
-        /* 5. Summary Box & Insight Box */
-        .summary-box {
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
+        /* Radio Button Styling */
+        div.row-widget.stRadio > div {
+            flex-direction: row;
+            align-items: stretch;
         }
-        .good-job {
-            background-color: #F0FDFA;
-            border: 1px solid #1A776F;
+        div.row-widget.stRadio > div[role="radiogroup"] > label {
+            background-color: #FFFFFF;
+            border: 1px solid #E5E7EB;
+            padding: 8px 16px;
+            border-radius: 5px;
+            margin-right: 5px;
+            transition: all 0.2s;
         }
-        .bad-job {
-            background-color: #FFF7ED;
-            border: 1px solid #FF7F40;
-        }
-        .insight-box {
+        div.row-widget.stRadio > div[role="radiogroup"] > label[data-baseweb="radio"] {
             background-color: #E6FFFA;
-            border-left: 4px solid #1A776F;
-            padding: 15px;
-            margin-top: 10px;
-            margin-bottom: 10px;
-            border-radius: 4px;
-            font-size: 1.05em;
-        }
-        
-        /* 6. Table Centering */
-        .dataframe {
-            text-align: center !important;
-        }
-        th {
-            text-align: center !important;
+            border-color: #1A776F;
+            color: #1A776F;
+            font-weight: bold;
         }
     </style>
 """, unsafe_allow_html=True)
 
-# --- GLOBAL TOOLTIPS ---
-tooltips = {
-    'launch_days': "Total number of unique days where at least one new ad was launched.",
-    'avg_gap': "The average number of days between two creative launches.",
-    'drought': "The longest single period of time where NO new ads were launched.",
-    'winning_creatives': "Number of ads that graduated from 'Testing' (Spent > Threshold).",
-    'slop': "Number of ads that failed to launch or barely spent (Spent < Threshold). Wasted production effort.",
-    'ipm': "Installs Per Mille. A measure of creative 'hook' power. (Installs / Impressions * 1000).",
-    'cpa': "Cost Per Action. Spend / Conversions.",
-    'cpm': "Cost Per Mille. Cost of 1,000 impressions.",
-    'ctr': "Click Through Rate.",
-    'cpc': "Cost Per Click.",
-    'roas': "Return on Ad Spend.",
-    'correlation': "Score from -1 to +1. \n+1: Velocity Improves Metric. \n-1: Velocity Hurts Metric.",
-    'lifespan': "The number of days between an ad's first impression and its last impression.",
-    'retention': "The percentage of ads that are still running X days after they were launched."
-}
+# --- SMART DATA LOADER (Meta + TikTok Support) ---
+def find_col(columns, candidates):
+    # Iterate through candidates (in order of priority)
+    for cand in candidates:
+        for col in columns:
+            # Check for match (cand inside col name)
+            if cand in col: 
+                return col
+    return None
 
-# --- PRIVACY NOTICE ---
-st.info("""
-    **🔒 Privacy & Data Security:** This tool processes data **locally in your browser session**. 
-    No data is saved to any server. Closing this tab deletes all data permanently.
-""")
+def clean_numeric(x):
+    if isinstance(x, str):
+        return x.replace(',', '').strip()
+    return x
 
-st.title("Creative Strategy Analytics")
+def simplify_media_type(val):
+    if pd.isna(val): return "Unknown"
+    val_str = str(val).lower()
+    if "video" in val_str: return "Video"
+    if "image" in val_str or "photo" in val_str: return "Image"
+    if "carousel" in val_str: return "Carousel"
+    return val # Return original if no keyword match
 
-# --- INSTRUCTIONS EXPANDER ---
-with st.expander("📝 How to export data from Meta Ads (Read this first!)", expanded=False):
-    st.markdown("""
-    1. Go to **Ads Manager** -> **Reports** -> **Export Table Data**.
-    2. **Breakdown:** Select **"Day"** (Under Time).
-    3. **Level:** Select **"Ad"**.
-    4. **Columns:** Ad ID, Reporting Starts, Amount Spent, Impressions, Link Clicks + All KPIs.
-    """)
-
-# --- HELPER FUNCTIONS ---
 def load_data(file):
-    df = pd.read_csv(file)
+    try:
+        df = pd.read_csv(file)
+    except:
+        st.error("❌ Could not read file. Ensure it is a valid CSV.")
+        return None, None, None, None, None, None, None, None, None, None, None, None
+
     df.columns = [c.lower().strip() for c in df.columns]
     
-    date_cols = [c for c in df.columns if 'date' in c or 'start' in c]
-    if not date_cols: return None, None, None, None, None, None, None, None
-    date_col = date_cols[0]
-    df[date_col] = pd.to_datetime(df[date_col])
+    # 1. Date Detection
+    date_col = find_col(df.columns, ['reporting starts', 'date', 'day', 'time'])
+    if not date_col: return None, None, None, None, None, None, None, None, None, None, None, None
     
-    spend_col = next((c for c in df.columns if 'amount' in c or 'spend' in c), None)
-    imps_col = next((c for c in df.columns if 'impression' in c), None)
-    clicks_col = next((c for c in df.columns if 'link click' in c or 'clicks' in c), None)
-    ad_id_col = next((c for c in df.columns if 'ad id' in c), None)
-    installs_col = next((c for c in df.columns if 'install' in c), None)
-    if not installs_col: installs_col = next((c for c in df.columns if 'result' in c), None)
-    value_col = next((c for c in df.columns if 'value' in c or 'revenue' in c), None)
+    # FIX: Handle TikTok Summary Rows ('-' or 'Total')
+    df[date_col] = pd.to_datetime(df[date_col], errors='coerce') 
+    df = df.dropna(subset=[date_col])
     
-    exclude = [date_col, spend_col, imps_col, clicks_col, ad_id_col, installs_col, value_col, 'reporting starts', 'reporting ends', 'ad name', 'ad set name', 'campaign name']
+    # 2. Column Mapping (UPDATED PRIORITY)
+    spend_col = find_col(df.columns, ['amount spent', 'total cost', 'cost', 'spend'])
+    imps_col = find_col(df.columns, ['impression'])
+    
+    # FIX: Prioritize 'clicks (all)' or 'link click' BEFORE generic 'click' to avoid grabbing 'Sound clicks'
+    clicks_col = find_col(df.columns, ['clicks (all)', 'total clicks', 'link click', 'click'])
+    
+    ad_id_col = find_col(df.columns, ['ad id', 'creative id'])
+    ad_name_col = find_col(df.columns, ['ad name', 'creative name'])
+    media_type_col = find_col(df.columns, ['media type', 'format', 'image/video'])
+    
+    installs_col = find_col(df.columns, ['install', 'mobile app install'])
+    if not installs_col: installs_col = find_col(df.columns, ['result', 'conversion', 'conversions'])
+    
+    value_col = find_col(df.columns, ['value', 'revenue', 'total value'])
+    
+    # 3. FIX: Force Numeric Types
+    numeric_cols = [spend_col, imps_col, clicks_col, installs_col, value_col]
+    for col in numeric_cols:
+        if col:
+            df[col] = df[col].apply(clean_numeric)
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
+    # Extra Metrics
+    exclude = [date_col, spend_col, imps_col, clicks_col, ad_id_col, installs_col, value_col, ad_name_col, media_type_col]
     numeric_candidates = df.select_dtypes(include=[np.number]).columns.tolist()
     extra_metrics = [c for c in numeric_candidates if c not in exclude and 'id' not in c and 'date' not in c]
 
-    # Determine Main Conversion Name for Text Logic
+    # Main Conversion Name
     conversion_name = "Action"
     if installs_col: conversion_name = "Install"
     elif value_col: conversion_name = "Purchase"
     elif len(extra_metrics) > 0: conversion_name = extra_metrics[0].replace('_', ' ').title()
 
-    return df, date_col, spend_col, imps_col, installs_col, clicks_col, value_col, ad_id_col, extra_metrics, conversion_name
+    return df, date_col, spend_col, imps_col, installs_col, clicks_col, value_col, ad_id_col, ad_name_col, media_type_col, extra_metrics, conversion_name
 
-def categorize_age(days):
-    if days <= 30: return '1. New (<1 Mo)'
-    elif days <= 90: return '2. Recent (1-3 Mo)'
-    elif days <= 180: return '3. Mature (3-6 Mo)'
-    elif days <= 365: return '4. Vintage (6 Mo - 1 Yr)'
-    else: return '5. Legacy (1 Yr+)'
+def categorize_age_granular(days):
+    if days <= 21: return '1. New (0-21d)'
+    elif days <= 60: return '2. Recent (22-60d)'
+    elif days <= 120: return '3. Mature (2-4 Mo)'
+    elif days <= 240: return '4. Vintage (4-8 Mo)'
+    else: return '5. Legacy (8 Mo+)'
 
-def color_delta(val, metric_name):
-    if pd.isna(val): return ''
-    lower_is_better = any(x in metric_name.upper() for x in ['CPA', 'CPC', 'CPM', 'COST', 'CP_'])
-    color = '#1A776F' if (val < 0 and lower_is_better) or (val > 0 and not lower_is_better) else '#FF7F40'
-    return f'color: {color}; font-weight: bold;'
+def calculate_metric(df, metric, spend_col, imps_col, clicks_col, installs_col, value_col, extra_metrics):
+    if df.empty: return 0
+    if metric == 'CPM': return (df[spend_col].sum() / df[imps_col].sum()) * 1000 if df[imps_col].sum() > 0 else 0
+    if metric == 'CPC': return df[spend_col].sum() / df[clicks_col].sum() if df[clicks_col].sum() > 0 else 0
+    if metric == 'CTR': return (df[clicks_col].sum() / df[imps_col].sum()) * 100 if df[imps_col].sum() > 0 else 0
+    if metric == 'CPA' and installs_col: return df[spend_col].sum() / df[installs_col].sum() if df[installs_col].sum() > 0 else 0
+    if metric == 'IPM' and installs_col: return (df[installs_col].sum() / df[imps_col].sum()) * 1000 if df[imps_col].sum() > 0 else 0
+    if metric == 'ROAS' and value_col: return df[value_col].sum() / df[spend_col].sum() if df[spend_col].sum() > 0 else 0
+    if "Cost Per" in metric:
+        base = metric.replace("Cost Per ", "")
+        raw = next((x for x in extra_metrics if x.replace('_', ' ').title() == base), None)
+        if raw and df[raw].sum() > 0: return df[spend_col].sum() / df[raw].sum()
+    raw_match = next((x for x in extra_metrics if x.replace('_', ' ').title() == metric), None)
+    if raw_match: return df[raw_match].sum()
+    return 0
 
 # --- MAIN APP ---
-uploaded_file = st.sidebar.file_uploader("Upload CSV File", type=['csv'])
+uploaded_file = st.sidebar.file_uploader("Upload CSV File (Meta, TikTok, etc)", type=['csv'])
 
 if uploaded_file is not None:
-    raw_df, date_col, spend_col, imps_col, installs_col, clicks_col, value_col, ad_id_col, extra_metrics, main_conv_name = load_data(uploaded_file)
+    raw_df, date_col, spend_col, imps_col, installs_col, clicks_col, value_col, ad_id_col, ad_name_col, media_type_col, extra_metrics, main_conv_name = load_data(uploaded_file)
     
     if raw_df is not None and spend_col and ad_id_col:
-        st.sidebar.success("✅ Data Loaded Successfully")
+        st.sidebar.success("✅ Data Parsed Successfully")
         
-        # --- SIDEBAR SETTINGS ---
+        # --- SETTINGS ---
         st.sidebar.markdown("---")
-        st.sidebar.header("⚙️ Settings & Guardrails")
-        min_spend_global = st.sidebar.number_input("Global Min Spend Filter (€)", value=0)
-        meaningful_spend = st.sidebar.number_input("Meaningful Spend Threshold (€)", value=50)
+        st.sidebar.header("⚙️ Settings")
+        min_spend_global = st.sidebar.number_input("Global Min Spend Filter (Currency)", value=0)
+        meaningful_spend = st.sidebar.number_input("Meaningful Spend Threshold (Currency)", value=50)
         
         # --- PROCESSING ---
         numeric_cols_all = raw_df.select_dtypes(include=[np.number]).columns.tolist()
@@ -198,477 +194,400 @@ if uploaded_file is not None:
         
         raw_df = raw_df[raw_df[spend_col] > min_spend_global]
         raw_df['week_start'] = raw_df[date_col].dt.to_period('W-MON').apply(lambda r: r.start_time)
-        weekly_metrics = raw_df.groupby('week_start')[numeric_cols_all].sum().reset_index()
         
-        creative_agg['launch_week'] = creative_agg['launch_date'].dt.to_period('W-MON').apply(lambda r: r.start_time)
-        weekly_new_creatives = creative_agg.groupby('launch_week')[ad_id_col].count().reset_index()
-        weekly_new_creatives.columns = ['week_start', 'new_creatives_count']
-        
-        analysis_df = pd.merge(weekly_metrics, weekly_new_creatives, on='week_start', how='left').fillna(0)
-        
-        # --- BUILD METRICS ---
-        analysis_df['CPM'] = (analysis_df[spend_col] / analysis_df[imps_col]) * 1000
-        analysis_df['CPC'] = analysis_df[spend_col] / analysis_df[clicks_col]
-        if clicks_col and imps_col: analysis_df['CTR'] = (analysis_df[clicks_col] / analysis_df[imps_col]) * 100
         available_metrics = ['CPM', 'CPC', 'CTR']
-        if installs_col:
-            analysis_df['CPA'] = analysis_df[spend_col] / analysis_df[installs_col]
-            analysis_df['IPM'] = (analysis_df[installs_col] / analysis_df[imps_col]) * 1000
-            available_metrics.extend(['CPA', 'IPM'])
-        if value_col:
-            analysis_df['ROAS'] = analysis_df[value_col] / analysis_df[spend_col]
-            available_metrics.append('ROAS')
+        if installs_col: available_metrics.extend(['CPA', 'IPM'])
+        if value_col: available_metrics.append('ROAS')
         for m in extra_metrics:
             clean = m.replace('_', ' ').title()
-            analysis_df[clean] = analysis_df[m]
             available_metrics.append(clean)
-            cp_name = f"Cost Per {clean}"
-            analysis_df[cp_name] = analysis_df.apply(lambda r: r[spend_col] / r[m] if r[m] > 0 else 0, axis=1)
-            available_metrics.append(cp_name)
+            available_metrics.append(f"Cost Per {clean}")
 
-        analysis_df = analysis_df[analysis_df[spend_col] > 0]
-        avg_cpm = analysis_df['CPM'].mean()
-
-        # --- SIDEBAR CALCULATOR ---
+        # --- SIDEBAR INFO ---
         st.sidebar.markdown("---")
-        st.sidebar.subheader("🧮 Budget vs. Velocity Calculator")
-        user_budget = st.sidebar.number_input("Monthly Budget (€)", value=5000)
-        test_imps = st.sidebar.number_input("Impressions to test 1 Ad", value=4000)
-        cost_to_test_one = (test_imps / 1000) * avg_cpm
-        max_tests = user_budget / cost_to_test_one if cost_to_test_one > 0 else 0
-        st.sidebar.info(f"At your CPM of €{avg_cpm:.2f}, it costs **€{cost_to_test_one:.2f}** to test one ad.\n\n👉 **Capacity:** You can test ~{int(max_tests)} ads/month.")
+        avg_cpm = (raw_df[spend_col].sum() / raw_df[imps_col].sum()) * 1000
+        cost_to_test = (4000 / 1000) * avg_cpm
+        st.sidebar.info(f"Avg CPM: {avg_cpm:.2f}\n\nEst. cost to test 1 ad (4k imps): **{cost_to_test:.2f}**")
 
         # --- 1. RHYTHM ---
         st.header("1. Creative Pulse & Consistency")
-        st.caption("Are we launching consistently? Consistent launches prevent ad fatigue and keep performance stable.")
+        st.caption("Tracks your launch cadence. Consistent launching prevents 'Performance Crashes' caused by fatigue.")
         
         launch_dates = sorted(creative_agg['launch_date'].unique())
-        drought_start, drought_end, max_launch_gap = None, None, 0
+        avg_gap = pd.Series(launch_dates).diff().dt.days.mean() if len(launch_dates) > 1 else 0
+        max_gap = pd.Series(launch_dates).diff().dt.days.max() if len(launch_dates) > 1 else 0
+        
+        drought_start, drought_end = None, None
         if len(launch_dates) > 1:
-            date_diffs = pd.Series(launch_dates).diff().dt.days.dropna()
-            avg_launch_gap = date_diffs.mean()
-            diff_values = date_diffs.values
-            max_idx = np.argmax(diff_values)
-            max_launch_gap = diff_values[max_idx]
-            drought_end = launch_dates[max_idx + 1]
-            drought_start = launch_dates[max_idx]
-        else: avg_launch_gap = 0
+            diffs = pd.Series(launch_dates).diff().dt.days.fillna(0).values
+            max_idx = np.argmax(diffs)
+            if diffs[max_idx] > 0:
+                drought_end = launch_dates[max_idx]
+                drought_start = launch_dates[max_idx-1]
 
         c1, c2, c3 = st.columns(3)
-        c1.metric("Unique Launch Days", len(launch_dates), help=tooltips['launch_days'])
-        c2.metric("Avg Days Between Launches", f"{avg_launch_gap:.1f} days", help=tooltips['avg_gap'])
-        c3.metric("Longest Drought", f"{max_launch_gap:.0f} days", help=tooltips['drought'])
+        c1.metric("Unique Launch Days", len(launch_dates))
+        c2.metric("Avg Launch Gap", f"{avg_gap:.1f} days")
+        c3.metric("Longest Drought", f"{max_gap:.0f} days")
         
-        # New "Always On" Analyst Note for Rhythm
-        txt_rhythm = f"💡 <b>Analyst Note:</b> Your average launch gap is <b>{avg_launch_gap:.1f} days</b>."
-        if avg_launch_gap <= 7:
-            txt_rhythm += " 🏆 <b>Elite Consistency:</b> You are launching weekly. This is the #1 driver of account growth."
-        elif avg_launch_gap <= 14:
-            txt_rhythm += " ✅ <b>Good Rhythm:</b> Launching every two weeks is a healthy, sustainable cadence."
-        else:
-            txt_rhythm += " ⚠️ <b>Inconsistent:</b> Irregular testing gaps make performance unpredictable. Try to launch at least every 14 days."
-        
-        if max_launch_gap > 30:
-            st.warning(f"⚠️ Stability Risk: You went {max_launch_gap:.0f} days without launching a single ad. \n\n**Why this matters:** Ad performance naturally decays over time. If you pause testing for too long, you have no new winners to replace the dying ones, leading to a sudden performance crash. \n\n**Target State:** Aim to launch at least one new test batch every 7 days.")
-        
+        txt_rhythm = f"💡 <b>Analyst Note:</b> Your average launch gap is <b>{avg_gap:.1f} days</b>. "
+        if avg_gap <= 7: txt_rhythm += "🏆 <b>Elite Consistency:</b> Weekly launches prevent fatigue."
+        elif avg_gap <= 14: txt_rhythm += "✅ <b>Good Rhythm:</b> Bi-weekly testing is sustainable."
+        else: txt_rhythm += "⚠️ <b>Inconsistent:</b> Gaps >14 days create volatility."
+        if max_gap > 30: st.warning(f"⚠️ Stability Risk: You went {max_gap:.0f} days without launching.")
         st.markdown(f"<div class='insight-box'>{txt_rhythm}</div>", unsafe_allow_html=True)
 
-        # --- 2. COMPOSITION ---
+        # --- 2. VOLUME VS PERFORMANCE ---
         st.markdown("---")
-        st.header("2. Spend Composition: Fresh vs. Fatigued")
-        st.caption("How much of your budget goes to testing new ideas vs. running old winners?")
+        st.subheader("2. Active Creative Volume vs. Performance")
+        st.caption("Does running MORE ads simultaneously help or hurt your efficiency? Use this to find your 'Saturation Point'.")
+        
+        vol_metric = st.radio("Select Performance Metric:", available_metrics, index=0, key='vol_kpi', horizontal=True)
+        
+        weekly_active = raw_df.groupby('week_start')[ad_id_col].nunique().reset_index(name='Active Creatives')
+        weekly_perf = raw_df.groupby('week_start').apply(lambda x: calculate_metric(x, vol_metric, spend_col, imps_col, clicks_col, installs_col, value_col, extra_metrics)).reset_index(name=vol_metric)
+        vol_df = pd.merge(weekly_active, weekly_perf, on='week_start')
+        
+        fig_vol = go.Figure()
+        fig_vol.add_trace(go.Bar(x=vol_df['week_start'], y=vol_df['Active Creatives'], name='Active Ads Count', marker_color='rgba(26, 119, 111, 0.3)', yaxis='y'))
+        fig_vol.add_trace(go.Scatter(x=vol_df['week_start'], y=vol_df[vol_metric], name=vol_metric, yaxis='y2', line=dict(color='#FF7F40', width=3)))
+        fig_vol.update_layout(title="Weekly Active Ads vs KPI", yaxis=dict(title='Active Ads Count'), yaxis2=dict(title=vol_metric, overlaying='y', side='right'), hovermode="x unified")
+        st.plotly_chart(fig_vol, use_container_width=True)
+        
+        corr_vol = vol_df['Active Creatives'].corr(vol_df[vol_metric])
+        txt_vol = f"💡 <b>Analyst Note:</b> Correlation is <b>{corr_vol:.2f}</b>. "
+        if abs(corr_vol) < 0.2: txt_vol += "Running more ads has <b>no major impact</b> on efficiency."
+        else: txt_vol += "Ensure you aren't diluting spend by running too many weak ads."
+        st.markdown(f"<div class='insight-box'>{txt_vol}</div>", unsafe_allow_html=True)
+
+        # --- 3. COMPOSITION ---
+        st.markdown("---")
+        st.header("3. Spend Composition: Fresh vs. Fatigued")
+        st.caption("Visualizes budget health. Are you relying on decaying winners (Fatigued) or testing new concepts (Fresh)?")
+        
+        creative_agg['launch_week'] = creative_agg['launch_date'].dt.to_period('W-MON').apply(lambda r: r.start_time)
+        weekly_new_creatives = creative_agg.groupby('launch_week')[ad_id_col].count().reset_index(name='new_creatives_count')
         
         raw_w_launch = pd.merge(raw_df, creative_agg[[ad_id_col, 'launch_date']], on=ad_id_col, how='left')
         raw_w_launch['spend_age_days'] = (raw_w_launch[date_col] - raw_w_launch['launch_date']).dt.days
         raw_w_launch['Freshness'] = raw_w_launch['spend_age_days'].apply(lambda x: 'Fresh (<21d)' if x < 21 else 'Fatigued (>21d)')
         
         comp_df = raw_w_launch.groupby(['week_start', 'Freshness'])[spend_col].sum().reset_index()
-        fresh_only = raw_w_launch[raw_w_launch['Freshness'] == 'Fresh (<21d)']
-        
-        active_fresh_count = fresh_only.groupby('week_start')[ad_id_col].nunique().reset_index()
         all_weeks = pd.DataFrame({'week_start': comp_df['week_start'].unique()})
-        active_fresh_count = pd.merge(all_weeks, active_fresh_count, on='week_start', how='left').fillna(0).sort_values('week_start')
+        new_counts = pd.merge(all_weeks, weekly_new_creatives, left_on='week_start', right_on='launch_week', how='left').fillna(0).sort_values('week_start')
 
         fig_dual = go.Figure()
         for status, color in [('Fatigued (>21d)', '#FF7F40'), ('Fresh (<21d)', '#1A776F')]:
             subset = comp_df[comp_df['Freshness'] == status]
-            fig_dual.add_trace(go.Bar(x=subset['week_start'].astype(str), y=subset[spend_col], name=f"Spend: {status}", marker_color=color))
-        fig_dual.add_trace(go.Scatter(x=active_fresh_count['week_start'].astype(str), y=active_fresh_count[ad_id_col], name="Active Fresh Ads (Count)", yaxis='y2', mode='lines+markers', line=dict(color='black', width=3)))
-        if drought_start and drought_end and max_launch_gap > 14:
-            fig_dual.add_vrect(x0=drought_start, x1=drought_end, fillcolor="red", opacity=0.15, layer="below", line_width=0, annotation_text="Longest Drought", annotation_position="top left")
-        fig_dual.update_layout(barmode='stack', title='Weekly Spend Composition + Fresh Ad Volume', yaxis=dict(title='Spend (€)'), yaxis2=dict(title='Count of Active Fresh Ads', overlaying='y', side='right', showgrid=False), legend=dict(orientation="h", y=1.1), hovermode="x unified")
-        st.plotly_chart(fig_dual, config={'displayModeBar': False, 'responsive': True})
-
-        fresh_spend_share = raw_w_launch[raw_w_launch['Freshness'] == 'Fresh (<21d)'][spend_col].sum() / raw_w_launch[spend_col].sum() * 100
-        drought_msg = ""
-        if drought_start and drought_end and max_launch_gap > 14:
-            mask_during = (raw_df[date_col] >= drought_start) & (raw_df[date_col] < drought_end)
-            mask_after = (raw_df[date_col] >= drought_end) & (raw_df[date_col] <= (drought_end + pd.Timedelta(days=14)))
-            data_during, data_after = raw_df[mask_during], raw_df[mask_after]
-            if not data_during.empty and not data_after.empty:
-                metric_to_check = f"Cost Per {main_conv_name}"
-                def get_cost_per_main(d):
-                    convs = 0
-                    if installs_col: convs = d[installs_col].sum()
-                    elif value_col: convs = d[value_col].sum() > 0
-                    elif len(extra_metrics) > 0: convs = d[extra_metrics[0]].sum()
-                    if convs > 0: return d[spend_col].sum() / convs
-                    return 0
-
-                val_d = get_cost_per_main(data_during)
-                val_a = get_cost_per_main(data_after)
-                
-                if val_d > 0:
-                    diff_pct = ((val_a - val_d) / val_d) * 100
-                    direction = "improved (dropped)" if diff_pct < 0 else "worsened (increased)"
-                    drought_msg = f"<br>⚠️ <b>Drought Analysis:</b> During the drought ({drought_start.strftime('%b %d')} - {drought_end.strftime('%b %d')}), your <b>{metric_to_check}</b> was <b>{val_d:.2f}</b>. After launches resumed, it <b>{direction} by {abs(diff_pct):.1f}%</b> to <b>{val_a:.2f}</b>."
+            fig_dual.add_trace(go.Bar(
+                x=subset['week_start'].astype(str), 
+                y=subset[spend_col], 
+                name=status, 
+                marker_color=color,
+                hovertemplate=f"<b>{status}</b><br>Spend: %{{y:,.0f}}<extra></extra>"
+            ))
         
-        st.markdown(f"<div class='insight-box'>💡 <b>Analyst Note:</b> Over the selected period, <b>{fresh_spend_share:.1f}%</b> of your total spend went to Fresh ads. {drought_msg}</div>", unsafe_allow_html=True)
+        fig_dual.add_trace(go.Scatter(
+            x=new_counts['week_start'], 
+            y=new_counts['new_creatives_count'], 
+            name="New Ads Launched", 
+            yaxis='y2', 
+            mode='lines', 
+            line=dict(color='black', width=2),
+            hovertemplate="<b>New Launches</b><br>Count: %{y}<extra></extra>"
+        ))
+        
+        if drought_start and drought_end and max_gap > 14:
+            fig_dual.add_vrect(x0=drought_start, x1=drought_end, fillcolor="red", opacity=0.15, layer="below", line_width=0, annotation_text="Longest Drought", annotation_position="top left")
+        
+        fig_dual.update_layout(barmode='stack', title='Weekly Spend Composition + Launch Volume', yaxis=dict(title='Spend'), yaxis2=dict(title='New Ads Launched', overlaying='y', side='right', showgrid=False), hovermode="x unified")
+        st.plotly_chart(fig_dual, use_container_width=True)
+        
+        fresh_share = raw_w_launch[raw_w_launch['Freshness'] == 'Fresh (<21d)'][spend_col].sum() / raw_w_launch[spend_col].sum() * 100
+        
+        drought_note = ""
+        if drought_start and drought_end and max_gap > 14:
+            mask_during = (raw_df[date_col] >= drought_start) & (raw_df[date_col] <= drought_end)
+            mask_after = (raw_df[date_col] > drought_end) & (raw_df[date_col] <= drought_end + pd.Timedelta(days=14))
+            
+            changes = []
+            rate_metrics = [m for m in available_metrics if m in ['CPM', 'CPC', 'CTR', 'CPA', 'IPM', 'ROAS'] or m.startswith('Cost Per')]
+            
+            for m in rate_metrics:
+                val_d = calculate_metric(raw_df[mask_during], m, spend_col, imps_col, clicks_col, installs_col, value_col, extra_metrics)
+                val_a = calculate_metric(raw_df[mask_after], m, spend_col, imps_col, clicks_col, installs_col, value_col, extra_metrics)
+                if val_d > 0:
+                    diff = ((val_a - val_d)/val_d)*100
+                    if abs(diff) > 1.0:
+                        changes.append(f"{m}: {diff:+.1f}%")
+            
+            if changes:
+                drought_note = f"<br>⚠️ <b>Drought Impact:</b> After the drought ended: " + ", ".join(changes) + "."
 
-        # --- 3. VELOCITY ---
+        st.markdown(f"<div class='insight-box'>💡 <b>Analyst Note:</b> <b>{fresh_share:.1f}%</b> of spend is on Fresh ads. The black line tracks launch volume.{drought_note}</div>", unsafe_allow_html=True)
+
+        # --- 4. CORRELATION ---
         st.markdown("---")
-        st.header("3. How Velocity Impacts Metrics")
-        st.caption("This matrix helps you understand if launching MORE ads actually helps or hurts your KPIs.")
-        c1, c2 = st.columns([2, 1])
-        with c1: st.write("")
-        with c2: lag_weeks = st.radio("Lag", options=[0, 1, 2, 3, 4, 5, 6, 7, 8], horizontal=True, label_visibility="collapsed", index=1, key="vel_lag")
+        st.header("4. Correlation Analysis")
+        st.caption("Does the act of launching new ads statistically improve your account performance? We apply a lag to account for learning phase.")
+        
+        st.markdown("""
+        <div class='edu-box'>
+        <b>📊 How to read Correlation:</b><br>
+        • <b>0.7 to 1.0:</b> Very Strong Relationship<br>
+        • <b>0.4 to 0.7:</b> Moderate Relationship<br>
+        • <b>0.0 to 0.3:</b> No Relationship (Random)<br>
+        • <b>Note:</b> Correlation is not Causation, but it's a strong hint.
+        </div>
+        """, unsafe_allow_html=True)
 
+        c1, c2 = st.columns([2, 1])
+        with c2: lag_weeks = st.slider("Weeks Lag", 0, 8, 1, help="Shift launch data forward to see delayed impact on performance.")
+        
+        weekly_stats = raw_df.groupby('week_start').apply(lambda x: pd.Series({m: calculate_metric(x, m, spend_col, imps_col, clicks_col, installs_col, value_col, extra_metrics) for m in available_metrics})).reset_index()
+        analysis_df = pd.merge(weekly_stats, weekly_new_creatives.rename(columns={'launch_week':'week_start'}), on='week_start', how='left').fillna(0)
+        
         corr_data = []
         for m in available_metrics:
-            tmp = analysis_df.dropna(subset=['new_creatives_count', m]).copy()
+            tmp = analysis_df.copy()
             tmp['lag'] = tmp['new_creatives_count'].shift(lag_weeks)
             tmp = tmp.dropna()
             if len(tmp) > 2:
                 corr = tmp['lag'].corr(tmp[m])
-                lower_is_better = any(x in m.upper() for x in ['CPA', 'CPC', 'CPM', 'COST', 'CP_'])
-                impact = "Good" if (corr < 0 and lower_is_better) or (corr > 0 and not lower_is_better) else "Bad"
+                lower_good = any(x in m.upper() for x in ['CPA', 'CPC', 'CPM', 'COST'])
+                impact = "Good" if (corr < 0 and lower_good) or (corr > 0 and not lower_good) else "Bad"
                 corr_data.append({'Metric': m, 'Correlation': corr, 'Impact': impact})
         
         if corr_data:
             corr_df = pd.DataFrame(corr_data).sort_values('Correlation', ascending=False)
-            fig_corr = px.bar(corr_df, x='Correlation', y='Metric', color='Impact', title="Velocity Impact Matrix", color_discrete_map={'Good': '#1A776F', 'Bad': '#FF7F40'}, orientation='h')
-            fig_corr.add_vline(x=0, line_width=1, line_color="black")
-            st.plotly_chart(fig_corr, config={'displayModeBar': False, 'responsive': True})
+            fig_c = px.bar(corr_df, x='Correlation', y='Metric', color='Impact', title=f"Velocity Correlation (Lag: {lag_weeks}w)", color_discrete_map={'Good': '#1A776F', 'Bad': '#FF7F40'}, orientation='h')
+            fig_c.add_vline(x=0, line_width=1, line_color="black")
+            st.plotly_chart(fig_c, use_container_width=True)
             
-            # New "Always On" Velocity Insight
-            best_corr = corr_df[corr_df['Impact'] == 'Good'].iloc[0] if not corr_df[corr_df['Impact'] == 'Good'].empty else None
-            txt_vel = "💡 <b>Analyst Note:</b> "
-            if best_corr is not None and abs(best_corr['Correlation']) > 0.3:
-                txt_vel += f"Velocity is a strong lever for <b>{best_corr['Metric']}</b> (Corr: {best_corr['Correlation']:.2f}). Launching more ads tends to improve it."
-            else:
-                txt_vel += "⚖️ <b>Velocity Neutral:</b> Increasing launch volume doesn't drastically swing your metrics right now. Your account is stable."
-            st.markdown(f"<div class='insight-box'>{txt_vel}</div>", unsafe_allow_html=True)
-        
-        st.subheader("Deep Dive")
-        vel_metric_choice = st.selectbox("Select Metric to Visualize:", available_metrics, index=0)
-        valid_vel = analysis_df.dropna(subset=['new_creatives_count', vel_metric_choice]).copy()
-        valid_vel['lag'] = valid_vel['new_creatives_count'].shift(lag_weeks)
-        valid_vel = valid_vel.dropna()
-        fig_v = go.Figure()
-        fig_v.add_trace(go.Bar(x=valid_vel['week_start'], y=valid_vel['lag'], name='New Creatives', marker_color='rgba(5, 38, 35, 0.2)', yaxis='y'))
-        fig_v.add_trace(go.Scatter(x=valid_vel['week_start'], y=valid_vel[vel_metric_choice], name=vel_metric_choice, mode='lines+markers', line=dict(color='#1A776F', width=3), yaxis='y2'))
-        fig_v.update_layout(title=f'Velocity vs {vel_metric_choice}', yaxis=dict(title='New Ads'), yaxis2=dict(title=vel_metric_choice, overlaying='y', side='right'))
-        st.plotly_chart(fig_v, config={'displayModeBar': False, 'responsive': True})
+            best = corr_df.iloc[0]
+            st.markdown(f"<div class='insight-box'>💡 <b>Analyst Note:</b> Strongest correlation is with <b>{best['Metric']}</b> ({best['Correlation']:.2f}). Launching new ads has the biggest impact on this metric.</div>", unsafe_allow_html=True)
 
-        # --- 4. COST OF INACTION ---
+        # --- 5. COST OF INACTION ---
         st.markdown("---")
-        st.header("4. The Cost of Inaction")
-        st.caption("We compare weeks where you launched ads vs. weeks where you did nothing to calculate the 'Price of Silence'.")
+        st.header("5. The Cost of Inaction")
+        st.caption("Comparing performance during 'Active' launch weeks vs. 'Quiet' weeks.")
         
-        valid_vel['Velocity_Bucket'] = valid_vel['lag'].apply(lambda x: 'Active' if x > 0 else 'Quiet')
-        impact_grp = valid_vel.groupby('Velocity_Bucket')[available_metrics].mean().reset_index()
+        analysis_df['Status'] = analysis_df['new_creatives_count'].shift(lag_weeks).apply(lambda x: 'Active' if x > 0 else 'Quiet')
+        impact_grp = analysis_df.groupby('Status')[available_metrics].mean().reset_index()
         
         if len(impact_grp) == 2:
-            act_row = impact_grp[impact_grp['Velocity_Bucket'] == 'Active'].iloc[0]
-            quiet_row = impact_grp[impact_grp['Velocity_Bucket'] == 'Quiet'].iloc[0]
+            act = impact_grp[impact_grp['Status'] == 'Active'].iloc[0]
+            quiet = impact_grp[impact_grp['Status'] == 'Quiet'].iloc[0]
             
-            for i in range(0, len(available_metrics), 5):
-                cols = st.columns(len(available_metrics[i:i+5]))
-                for j, m in enumerate(available_metrics[i:i+5]):
-                    av, qv = act_row[m], quiet_row[m]
-                    diff = ((av - qv) / qv) * 100 if qv != 0 else 0
-                    lower = any(x in m.upper() for x in ['CPA', 'CPC', 'CPM', 'COST'])
-                    d_col = "inverse" if lower else "normal"
-                    with cols[j]: st.metric(label=m, value=f"{av:,.2f}", delta=f"{diff:+.1f}% vs Quiet", delta_color=d_col)
-            
-            main_cost_metric = f"Cost Per {main_conv_name}" if f"Cost Per {main_conv_name}" in available_metrics else 'CPM'
-            if main_cost_metric in available_metrics:
-                act_m = act_row[main_cost_metric]
-                quiet_m = quiet_row[main_cost_metric]
-                if act_m > 0:
-                    diff_m = ((quiet_m - act_m) / act_m) * 100
-                    msg = f"📉 <b>The Price of Silence:</b> When you stop launching, your <b>{main_cost_metric}</b> increases by <b>{diff_m:.1f}%</b>." if quiet_m > act_m else f"⚖️ <b>Stability:</b> Your {main_cost_metric} remains stable during quiet weeks."
-                    st.markdown(f"<div class='insight-box'>{msg}</div>", unsafe_allow_html=True)
+            for i in range(0, len(available_metrics), 4):
+                cols = st.columns(4)
+                for j, m in enumerate(available_metrics[i:i+4]):
+                    av, qv = act[m], quiet[m]
+                    diff = ((qv - av) / av) * 100 if av > 0 else 0
+                    
+                    lower_good = any(x in m.upper() for x in ['CPA', 'CPC', 'CPM', 'COST'])
+                    color = "inverse" if lower_good else "normal"
+                    with cols[j]: st.metric(m, f"{qv:,.2f}", delta=f"{diff:+.1f}% vs Active", delta_color=color)
 
-        # --- 5. WINNING CREATIVES ---
+            st.markdown(f"<div class='insight-box'>💡 <b>Analyst Note:</b> Values shown are averages during <b>Quiet Weeks</b>. <br>• Red deltas = Metric gets worse when you pause. <br>• Green deltas = Metric improves (or stays stable). <br>• If your CPA/ROAS degrades during Quiet weeks, you are <b>Launch Dependent</b>.</div>", unsafe_allow_html=True)
+
+        # --- 6. WINNERS & SLOP ---
         st.markdown("---")
-        st.header("5. Winning Creatives & Efficiency")
-        st.caption("Are we producing winners or wasting budget on 'Slop'? (Slop = Ads that spent < Threshold).")
+        st.header("6. Winning Creatives & Efficiency")
+        st.caption("Efficiency Audit: Are we finding winners or burning cash on low-spend failures?")
         
         total_ads = len(creative_agg)
-        if total_ads > 0:
-            winners = creative_agg[creative_agg['lifetime_spend'] >= meaningful_spend]
-            slop = creative_agg[creative_agg['lifetime_spend'] < meaningful_spend]
-            win_pct = (len(winners)/total_ads)*100
-            slop_pct = (len(slop)/total_ads)*100
-            slop_spend = slop['lifetime_spend'].sum()
-            
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Total Ads", total_ads)
-            c2.metric("Winners", f"{len(winners)} ({win_pct:.1f}%)", help=tooltips['winning_creatives'])
-            
-            slop_delta_color = "inverse" # Red if high
-            c3.metric("Slop", f"{len(slop)}", delta=f"{slop_pct:.1f}% Rate", delta_color=slop_delta_color, help=tooltips['slop'])
-            
-            txt = f"💡 <b>Analyst Note:</b> Your Win Rate is {win_pct:.1f}%."
-            txt += " High failure rate." if win_pct < 10 else " Efficient testing." if win_pct > 30 else ""
-            txt += f" <br>💸 <b>Wasted Spend:</b> <b>€{slop_spend:,.0f}</b> spent on 'Slop'."
-            st.markdown(f"<div class='insight-box'>{txt}</div>", unsafe_allow_html=True)
-
-        # --- 6. AGE DISTRIBUTION ---
-        st.markdown("---")
-        st.header("6. Ad Age Distribution")
-        st.caption("What represents your 'Spend Portfolio'? Do you rely on New, Mature, or Vintage ads?")
-        
-        raw_w_launch['Dynamic_Age_Bucket'] = raw_w_launch['spend_age_days'].apply(categorize_age)
-        bucket_spend = raw_w_launch.groupby('Dynamic_Age_Bucket')[spend_col].sum().reset_index()
-        total_spend = bucket_spend[spend_col].sum()
-        bucket_spend['% Spend'] = (bucket_spend[spend_col] / total_spend) * 100
-        
-        c1, c2 = st.columns([1, 2])
-        with c1: st.dataframe(bucket_spend.style.format({spend_col: '€{:.0f}', '% Spend': '{:.1f}%'}))
-        with c2: st.plotly_chart(px.pie(bucket_spend, values=spend_col, names='Dynamic_Age_Bucket', title="Share of Spend by Age", color_discrete_sequence=px.colors.sequential.Teal), config={'displayModeBar': False, 'responsive': True})
-
-        vintage_spend = bucket_spend[bucket_spend['Dynamic_Age_Bucket'].str.contains('Vintage|Legacy', regex=True)]['% Spend'].sum()
-        new_spend = bucket_spend[bucket_spend['Dynamic_Age_Bucket'].str.contains('New', regex=True)]['% Spend'].sum()
-        
-        # IMPROVED LOGIC
-        txt_age = f"💡 <b>Analyst Note:</b>"
-        if vintage_spend > 50: 
-            txt_age += f" <b>Zombie Alert:</b> {vintage_spend:.1f}% of spend is on ads older than 6 months. This is risky; you rely too much on legacy winners."
-        elif new_spend > 60: 
-            txt_age += f" <b>Heavy Testing:</b> {new_spend:.1f}% of spend is on New ads (<1mo). This causes high volatility."
-        elif new_spend > 40: 
-            txt_age += f" <b>Aggressive Rotation:</b> {new_spend:.1f}% of spend is on New ads. This is higher than the ideal 20%, suggesting you are actively fighting creative fatigue or scaling hard."
-        elif vintage_spend < 15:
-            txt_age += f" <b>Low Stability:</b> Only {vintage_spend:.1f}% of spend is on ads >6 months old. You lack long-term 'Evergreen' assets."
-        else: 
-            txt_age += f" <b>Portfolio is Balanced:</b> You have a healthy mix of New Ads ({new_spend:.1f}% for testing) and Vintage Ads ({vintage_spend:.1f}% for stability)."
-            
-        st.markdown(f"<div class='insight-box'>{txt_age}</div>", unsafe_allow_html=True)
-
-        # --- 7. OLD VS NEW ---
-        st.markdown("---")
-        st.header("7. Performance: Old vs. New (Simpson's Paradox)")
-        st.caption("Comparing aggregate performance of new ideas vs. old winners.")
-        
-        fresh_grp = raw_w_launch.groupby('Freshness')[numeric_cols_all].sum().reset_index()
-        
-        def get_val(df, m):
-            if m == 'CPM': return (df[spend_col]/df[imps_col])*1000
-            if m == 'CPC': return df[spend_col]/df[clicks_col]
-            if m == 'CTR': return (df[clicks_col]/df[imps_col])*100
-            if m == 'CPA' and installs_col: return df[spend_col]/df[installs_col]
-            if m == 'ROAS' and value_col: return df[value_col]/df[spend_col]
-            raw_match = next((x for x in extra_metrics if x.replace('_', ' ').title() == m), None)
-            if raw_match: return df[raw_match]
-            if "Cost Per" in m:
-                base = m.replace("Cost Per ", "")
-                raw = next((x for x in extra_metrics if x.replace('_', ' ').title() == base), None)
-                if raw: return df[spend_col]/df[raw]
-            return 0
-
-        deltas = []
-        for m in available_metrics:
-            try:
-                fr = float(get_val(fresh_grp[fresh_grp['Freshness'] == 'Fresh (<21d)'], m))
-                fa = float(get_val(fresh_grp[fresh_grp['Freshness'] == 'Fatigued (>21d)'], m))
-                if fa != 0:
-                    d = ((fr - fa)/fa)*100
-                    deltas.append({'Metric': m, 'Fresh': fr, 'Fatigued': fa, 'Delta %': d})
-            except: pass
-        
-        delta_df = pd.DataFrame(deltas)
-        st.dataframe(delta_df.style.format({'Fresh': '{:.2f}', 'Fatigued': '{:.2f}', 'Delta %': '{:+.1f}%'}).apply(lambda x: [color_delta(v, delta_df.iloc[i]['Metric']) for i, v in enumerate(x)], subset=['Delta %'], axis=0).set_table_styles([dict(selector="th", props=[("text-align", "center")]), dict(selector="td", props=[("text-align", "center")])]), use_container_width=True)
-
-        st.markdown("""
-        <div class='insight-box'>
-            💡 <b>The "Simpson's Paradox" Explained:</b> You might see that launching new ads improves overall account performance (Section 3), yet this table shows that "Fresh" ads perform worse than "Fatigued" ads.
-            <br><br>
-            This is because <b>"Fatigued" ads are a list of Survivors.</b> They are the best creatives you've ever made. <b>"Fresh" ads are a mix of winners and losers.</b> You must accept lower average efficiency in the "Fresh" bucket to find the one unicorn that will eventually join the "Fatigued" bucket.
-        </div>
-        """, unsafe_allow_html=True)
-        
-        ovn_metric_choice = st.selectbox("Compare Metric:", available_metrics, index=0, key="ovn_select")
-        eff_comp = raw_w_launch.groupby('Freshness')[numeric_cols_all].sum().reset_index()
-        eff_comp['val'] = eff_comp.apply(lambda row: float(get_val(pd.DataFrame([row]), ovn_metric_choice)), axis=1)
-        st.plotly_chart(px.bar(eff_comp, x='Freshness', y='val', color='Freshness', title=f"{ovn_metric_choice} Comparison", color_discrete_map={'Fresh (<21d)': '#1A776F', 'Fatigued (>21d)': '#FF7F40'}, text_auto='.2f'), config={'displayModeBar': False, 'responsive': True})
-
-        # Enhanced Hidden Insights (Always On)
-        if not delta_df.empty:
-            delta_df['Abs_Delta'] = delta_df['Delta %'].abs()
-            sig_devs = delta_df[delta_df['Abs_Delta'] > 20]
-            
-            insights_list = []
-            if not sig_devs.empty:
-                for _, row in sig_devs.iterrows():
-                    is_cost = any(x in row['Metric'].upper() for x in ['CPA','COST','CPC','CPM'])
-                    direction = "better" if (row['Delta %'] < 0 and is_cost) or (row['Delta %'] > 0 and not is_cost) else "worse"
-                    insights_list.append(f"<li><b>{row['Metric']}</b> is <b>{abs(row['Delta %']):.1f}% {direction}</b> on fresh ads.</li>")
-                st.markdown(f"<div class='insight-box'>👀 <b>Hidden Insights (Significant Deviations):</b><ul>{''.join(insights_list)}</ul></div>", unsafe_allow_html=True)
-            else:
-                st.markdown("<div class='insight-box'>✅ <b>Consistent Quality:</b> Fresh ads perform similarly to old ads across all metrics. No hidden volatility detected.</div>", unsafe_allow_html=True)
-
-        # --- 8. DECAY ---
-        st.markdown("---")
-        st.header("8. The Decay Curve")
-        st.caption("How long until performance drops? Use this to plan when to refresh your ads.")
-        decay_choice = st.selectbox("Select Metric:", available_metrics, index=0, key="decay_select")
-        
-        raw_w_launch['absolute_age'] = (raw_w_launch[date_col] - raw_w_launch['launch_date']).dt.days
-        life_df = raw_w_launch.groupby('absolute_age')[numeric_cols_all].sum().reset_index()
-        life_df['y'] = life_df.apply(lambda r: float(get_val(pd.DataFrame([r]), decay_choice)), axis=1)
-        life_df = life_df[life_df['absolute_age'] <= 60]
-        
-        # Max Drop Logic
-        drop_week = 21
-        max_drop_val = 0
-        if len(life_df) > 28:
-            for w in [7, 14, 21, 28, 35, 42]:
-                pre = life_df[(life_df['absolute_age'] >= w-7) & (life_df['absolute_age'] < w)]['y'].mean()
-                post = life_df[(life_df['absolute_age'] >= w) & (life_df['absolute_age'] < w+7)]['y'].mean()
-                if pre != 0:
-                    change = ((post - pre) / pre) * 100
-                    is_bad = (change > 0) if any(x in decay_choice.upper() for x in ['CPA','COST']) else (change < 0)
-                    if is_bad and abs(change) > max_drop_val:
-                        max_drop_val = abs(change)
-                        drop_week = w
-
-        # Visuals
-        fig_decay = px.line(life_df, x='absolute_age', y='y', title=f"{decay_choice} by Day", markers=True)
-        fig_decay.add_vline(x=drop_week, line_dash="dash", line_color="#FF7F40", annotation_text=f"Max Drop (Day {drop_week})")
-        fig_decay.update_traces(line_color='#052623')
-        
-        # Advanced Analysis
-        early = life_df[life_df['absolute_age'] <= 7]['y'].mean()
-        mid = life_df[(life_df['absolute_age'] > 14) & (life_df['absolute_age'] <= 28)]['y'].mean()
-        late = life_df[(life_df['absolute_age'] > 30) & (life_df['absolute_age'] <= 60)]['y'].mean()
-        
-        lower_is_better = any(x in decay_choice.upper() for x in ['CPA', 'CPC', 'CPM', 'COST', 'CP_'])
-        analysis_txt = f"💡 <b>Deep Dive Analysis for {decay_choice}:</b><br>"
-        
-        # Check for Flatline
-        if life_df['y'].std() == 0 or len(life_df) < 5:
-             analysis_txt += "• <b>Insufficient Data:</b> The curve is flat or incomplete. Try selecting a higher-volume metric like CPM or CTR."
-        else:
-            analysis_txt += f"• The 🔴 <b>Red Dashed Line</b> marks <b>Day {drop_week}</b>, where we detect the steepest negative performance shift.<br>"
-            
-            if pd.notnull(early) and pd.notnull(mid) and early != 0:
-                early_change = ((mid - early) / early) * 100
-                is_early_bad = (early_change > 15) if lower_is_better else (early_change < -15)
-                if is_early_bad: 
-                    analysis_txt += f"• <b>Early Crash:</b> Performance degrades by <b>{abs(early_change):.1f}%</b> in the first month (Weak Hooks).<br>"
-                    fig_decay.add_annotation(x=4, y=early, text="Early Crash", showarrow=True, arrowhead=1)
-                else: 
-                    analysis_txt += f"• <b>Solid Start:</b> Stable performance in the first month.<br>"
-
-            if pd.notnull(mid) and pd.notnull(late) and mid != 0:
-                late_change = ((late - mid) / mid) * 100
-                is_late_bad = (late_change > 10) if lower_is_better else (late_change < -10)
-                if is_late_bad: 
-                    analysis_txt += f"• <b>Late Fatigue:</b> Performance worsens by <b>{abs(late_change):.1f}%</b> after Day 30."
-                    if lower_is_better and "CPM" in decay_choice: analysis_txt += " (Audience Saturation Likely)."
-                elif (late_change < -10 and lower_is_better) or (late_change > 10 and not lower_is_better):
-                    analysis_txt += f"• <b>Survivor Bias:</b> Metrics improve by <b>{abs(late_change):.1f}%</b> late-stage (only winners survive)."
-                else:
-                    analysis_txt += f"• <b>High Endurance:</b> Performance holds steady late-stage."
-
-        st.plotly_chart(fig_decay, config={'displayModeBar': False, 'responsive': True})
-        st.markdown(f"<div class='insight-box'>{analysis_txt}</div>", unsafe_allow_html=True)
-
-        # --- 9. LIFESPAN ---
-        st.markdown("---")
-        st.header("9. Lifespan & Retention")
-        st.caption("How fast do we burn through concepts? The 'Half-Life' is when 50% of ads are paused.")
-        
-        avg_lifespan = creative_agg['lifespan_days'].mean()
-        winners_agg = creative_agg[creative_agg['lifetime_spend'] >= meaningful_spend]
-        avg_lifespan_winners = winners_agg['lifespan_days'].mean() if not winners_agg.empty else 0
-        active_now = len(creative_agg[creative_agg['last_date'] >= (raw_df[date_col].max() - pd.Timedelta(days=7))])
+        winners = creative_agg[creative_agg['lifetime_spend'] >= meaningful_spend]
+        slop = creative_agg[creative_agg['lifetime_spend'] < meaningful_spend]
+        win_pct = (len(winners)/total_ads)*100
+        slop_pct = (len(slop)/total_ads)*100
+        slop_spend = slop['lifetime_spend'].sum()
+        total_spend_all = creative_agg['lifetime_spend'].sum()
+        slop_spend_share = (slop_spend / total_spend_all) * 100 if total_spend_all > 0 else 0
         
         c1, c2, c3 = st.columns(3)
-        c1.metric("Avg Lifespan (All)", f"{avg_lifespan:.1f} days")
-        c2.metric("Avg Lifespan (Winners)", f"{avg_lifespan_winners:.1f} days")
-        c3.metric("Active Now", f"{active_now} / {len(creative_agg)}")
+        c1.metric("Total Ads", total_ads)
+        c2.metric("Winners", f"{len(winners)} ({win_pct:.1f}%)")
+        c3.metric("Creative Slop", f"{len(slop)} ({slop_pct:.1f}%)")
         
-        ret_data = []
-        for t in range(61):
-            pct = (len(creative_agg[creative_agg['lifespan_days'] >= t])/len(creative_agg))*100 if len(creative_agg) > 0 else 0
-            ret_data.append({'Day': t, '%': pct})
+        st.markdown(f"<div class='insight-box'>💡 <b>Analyst Note:</b> <br>• <b>Win Rate:</b> {win_pct:.1f}%. (Benchmark: >20% for scale, >30% for efficiency). <br>• <b>Wasted Budget:</b> You spent <b>{slop_spend:,.0f} ({slop_spend_share:.1f}%)</b> of your total budget on Slop. (Benchmark: Keep <10%).</div>", unsafe_allow_html=True)
+
+        # --- 7. AD AGE DISTRIBUTION ---
+        st.markdown("---")
+        st.header("7. Ad Age Distribution")
+        st.caption("Portfolio Balance: Do you have a healthy mix of New (Testing), Mature (Scaling), and Legacy (Profit) ads?")
+        
+        raw_w_launch['Granular_Age'] = raw_w_launch['spend_age_days'].apply(categorize_age_granular)
+        
+        age_agg = raw_w_launch.groupby('Granular_Age').apply(
+            lambda x: pd.Series({
+                'Spend': x[spend_col].sum(),
+                'CPM': calculate_metric(x, 'CPM', spend_col, imps_col, clicks_col, installs_col, value_col, extra_metrics),
+                'CTR': calculate_metric(x, 'CTR', spend_col, imps_col, clicks_col, installs_col, value_col, extra_metrics),
+                f'Cost Per {main_conv_name}': calculate_metric(x, f'Cost Per {main_conv_name}' if f'Cost Per {main_conv_name}' in available_metrics else 'CPM', spend_col, imps_col, clicks_col, installs_col, value_col, extra_metrics),
+                'ROAS': calculate_metric(x, 'ROAS', spend_col, imps_col, clicks_col, installs_col, value_col, extra_metrics)
+            })
+        ).reset_index()
+        age_agg['Share of Spend'] = (age_agg['Spend'] / age_agg['Spend'].sum()) * 100
+        
+        c1, c2 = st.columns([2, 1])
+        with c1:
+            fmt = {'Spend': '{:.0f}', 'Share of Spend': '{:.1f}%', 'CPM': '{:.2f}', 'CTR': '{:.2f}%', f'Cost Per {main_conv_name}': '{:.2f}', 'ROAS': '{:.2f}'}
+            st.dataframe(age_agg.style.format(fmt, na_rep="-"), use_container_width=True)
+        with c2:
+            st.plotly_chart(px.pie(age_agg, values='Spend', names='Granular_Age', title="Portfolio Balance", color_discrete_sequence=px.colors.sequential.Teal), use_container_width=True)
+            
+        st.markdown(f"<div class='insight-box'>💡 <b>Analyst Note:</b> Compare your <b>New</b> vs <b>Legacy</b> performance. If Legacy ads have significantly better CPA, you are relying on old winners. If New ads are better, your recent creative strategy is working well.</div>", unsafe_allow_html=True)
+
+        # --- 8. DECAY & RETENTION (SUPER CHART) ---
+        st.markdown("---")
+        st.header("8. The Decay Curve & Retention")
+        st.caption("Visualizes Lifecycle. Left Axis = Performance. Right Axis = Retention %. Purple Line = Half-Life.")
+        
+        decay_metric = st.radio("Select Metric to analyze against Retention:", available_metrics, index=0, key='decay_m_combined', horizontal=True)
+        
+        raw_w_launch['abs_age'] = (raw_w_launch[date_col] - raw_w_launch['launch_date']).dt.days
+        life_df = raw_w_launch.groupby('abs_age').apply(lambda x: calculate_metric(x, decay_metric, spend_col, imps_col, clicks_col, installs_col, value_col, extra_metrics)).reset_index(name='y')
+        
+        total_creatives = len(creative_agg)
+        ret_data = [{'abs_age': t, 'retention': (len(creative_agg[creative_agg['lifespan_days'] >= t])/total_creatives)*100} for t in range(61)]
         ret_df = pd.DataFrame(ret_data)
         
-        # Calculate Half-Life
-        half_life = "60+"
-        under_50 = ret_df[ret_df['%'] < 50]
-        if not under_50.empty: half_life = int(under_50.iloc[0]['Day'])
+        combo = pd.merge(life_df, ret_df, on='abs_age', how='left')
+        combo = combo[combo['abs_age'] <= 60]
         
-        fig_ret = px.line(ret_df, x='Day', y='%', title="Survival Curve").update_traces(line_color='#1A776F', fill='tozeroy')
-        fig_ret.add_vline(x=7, line_dash="dash", line_color="#FF7F40", annotation_text="Day 7 Check")
-        if isinstance(half_life, int):
-            fig_ret.add_vline(x=half_life, line_dash="dot", line_color="purple", annotation_text=f"Half-Life ({half_life}d)")
-            
-        st.plotly_chart(fig_ret, config={'displayModeBar': False, 'responsive': True})
+        # Sensitive Max Drop
+        check_limit = len(combo) - 3 # Exclude tail noise
+        subset_y = combo['y'].iloc[:check_limit]
+        diffs = subset_y.diff()
+        lower_bad = any(x in decay_metric.upper() for x in ['CPA','COST', 'CPM', 'CPC'])
+        drop_idx = diffs.idxmax() if lower_bad else diffs.idxmin()
+        if pd.isna(drop_idx) or drop_idx < 1: drop_idx = 21
+        
+        fig_combo = go.Figure()
+        
+        # Area (Retention)
+        fig_combo.add_trace(go.Scatter(x=combo['abs_age'], y=combo['retention'], name="Retention %", fill='tozeroy', line=dict(color='rgba(26, 119, 111, 0.2)', width=0), yaxis='y2'))
+        
+        # Line (Performance)
+        fig_combo.add_trace(go.Scatter(x=combo['abs_age'], y=combo['y'], name=decay_metric, mode='lines+markers', line=dict(color='#052623', width=2)))
+        
+        # Max Drop Line
+        fig_combo.add_vline(x=drop_idx, line_dash="dash", line_color="#FF7F40", annotation_text=f"Max Shift (Day {drop_idx})")
+        
+        # Half Life Line
+        under_50 = ret_df[ret_df['retention'] < 50]
+        h_life = under_50['abs_age'].min() if not under_50.empty else None
+        
+        if h_life is not None and not pd.isna(h_life):
+             fig_combo.add_vline(x=h_life, line_dash="dot", line_color="purple", annotation_text=f"Half-Life ({int(h_life)}d)", annotation_position="top right")
 
-        # Retention Insights
-        day_7 = ret_df[ret_df['Day'] == 7]['%'].values[0] if not ret_df.empty else 0
-        day_60 = ret_df[ret_df['Day'] == 60]['%'].values[0] if not ret_df.empty else 0
+        fig_combo.update_layout(
+            title=f"{decay_metric} Performance vs Retention",
+            xaxis=dict(title="Days Since Launch"),
+            yaxis=dict(title=decay_metric, side='left'),
+            yaxis2=dict(title="Retention %", side='right', overlaying='y', range=[0, 100], showgrid=False),
+            hovermode="x unified", legend=dict(orientation="h", y=1.1)
+        )
+        st.plotly_chart(fig_combo, use_container_width=True)
         
-        txt_ret = f"💡 <b>Deep Dive Analysis:</b><br>"
-        txt_ret += f"• <b>Creative Half-Life:</b> It takes <b>{half_life} days</b> for 50% of your ads to be turned off (Purple Line).<br>"
+        txt_combo = f"💡 <b>Deep Dive:</b><br>"
+        txt_combo += f"• <b>Max Performance Shift:</b> Day {drop_idx}.<br>"
         
-        if day_7 < 30: txt_ret += f"• <b>Fast Churn:</b> <b>{100-day_7:.1f}%</b> of ads fail in week 1 (Orange Line). You are testing aggressively.<br>"
-        else: txt_ret += f"• <b>High Retention:</b> <b>{day_7:.1f}%</b> of ads survive past week 1. Your creative quality is consistent.<br>"
+        hl_text = f"Day {int(h_life)}" if h_life is not None else "Day 60+"
+        txt_combo += f"• <b>Creative Half-Life:</b> {hl_text} (Purple Line). 50% of your ads are dead by this day.<br>"
         
-        if day_60 > 10: txt_ret += f"• <b>Legacy Builders:</b> <b>{day_60:.1f}%</b> of ads make it to 2 months. You have strong evergreen concepts."
-        else: txt_ret += f"• <b>Short-Term Focus:</b> Almost no ads survive to 2 months. You rely on constant new launches."
+        if h_life is not None and drop_idx < h_life:
+             txt_combo += f"⚠️ <b>Reactive Pausing:</b> Performance crashes at Day {drop_idx}, but you wait until {hl_text} to cut ads."
+        elif h_life is not None:
+             txt_combo += f"✅ <b>Proactive Pausing:</b> You cut ads ({hl_text}) before the major crash (Day {drop_idx})."
+             
+        st.markdown(f"<div class='insight-box'>{txt_combo}</div>", unsafe_allow_html=True)
+
+        # --- 9. ATTRIBUTES (Multi-Group & Merged) ---
+        st.markdown("---")
+        st.header("9. Creative Attribute Deep Dive")
+        st.caption("Compare performance by Ad Name Tags and Media Type in a single view.")
         
-        st.markdown(f"<div class='insight-box'>{txt_ret}</div>", unsafe_allow_html=True)
+        st.subheader("🅰️ Ad Name Multi-Group + 📷 Media Type")
+        search_terms = st.text_area("Enter tags separated by commas (e.g. UGC, Static, Offer):", value="UGC, Static")
+        att_metric_name = st.radio("Select Metric:", available_metrics, index=0, key='att_name', horizontal=True)
+        
+        if search_terms and ad_name_col:
+            tags = [t.strip() for t in search_terms.split(',') if t.strip()]
+            
+            def assign_group(name):
+                name_str = str(name).lower()
+                for t in tags:
+                    if t.lower() in name_str: return t
+                return "Other"
+            
+            raw_df['Ad_Group'] = raw_df[ad_name_col].apply(assign_group)
+            
+            # Group by Name Group AND Media Type (if exists)
+            group_cols = ['Ad_Group']
+            color_col = 'Ad_Group'
+            if media_type_col:
+                # Simplify TikTok/Meta Media Types
+                raw_df['Simple_Media_Type'] = raw_df[media_type_col].apply(simplify_media_type)
+                group_cols.append('Simple_Media_Type')
+                color_col = 'Simple_Media_Type'
+
+            grp = raw_df.groupby(group_cols).apply(lambda x: calculate_metric(x, att_metric_name, spend_col, imps_col, clicks_col, installs_col, value_col, extra_metrics)).reset_index(name='Value')
+            
+            # Grouped Bar Chart
+            fig_att = px.bar(grp, x='Ad_Group', y='Value', color=color_col, barmode='group', title=f"{att_metric_name} by Group & Media Type", text_auto='.2f')
+            st.plotly_chart(fig_att, use_container_width=True)
+            
+            if not media_type_col:
+                 st.info("ℹ️ Add a 'Media Type' column to your CSV to see Image vs Video splits within these groups.")
 
         # --- 10. EXECUTIVE SUMMARY ---
         st.markdown("---")
-        st.header("10. Executive Summary & Report Card")
-        st.caption("A high-level strategic review for the Ad Specialist.")
+        st.header("10. Executive Summary")
+        st.caption("Strategic Overview & Action Plan")
         
-        score = 0
-        good, bad = [], []
+        # Logic for Summary Points
+        highlights = []
+        warnings = []
         
-        if avg_launch_gap <= 10: 
-            score += 1
-            good.append(f"<b>High Velocity:</b> Launches every {avg_launch_gap:.1f} days.")
-        else:
-            bad.append(f"<b>Low Velocity:</b> Launches are too rare ({avg_launch_gap:.1f} days). Target: <7 days.")
-            
-        if 'win_pct' in locals() and win_pct >= 20:
-            score += 1
-            good.append(f"<b>High Quality:</b> {win_pct:.1f}% win rate.")
-        else:
-            bad.append(f"<b>Low Quality:</b> Win rate is {win_pct:.1f}% (Target: >20%).")
-            
-        if not delta_df.empty:
-            best_m = delta_df.sort_values('Delta %', key=abs, ascending=False).iloc[0]
-            is_cost = any(x in best_m['Metric'].upper() for x in ['CPA','COST'])
-            is_better = (best_m['Delta %'] < 0 and is_cost) or (best_m['Delta %'] > 0 and not is_cost)
-            if is_better:
-                score += 1
-                good.append(f"<b>Testing Works:</b> Fresh ads beat old ads on {best_m['Metric']}.")
-            else:
-                bad.append(f"<b>Testing Struggle:</b> Fresh ads perform worse on {best_m['Metric']}.")
+        if avg_gap <= 10: highlights.append(f"✅ <b>High Velocity:</b> Launching every {avg_gap:.1f} days.")
+        else: warnings.append(f"⚠️ <b>Low Velocity:</b> Launching every {avg_gap:.1f} days (Target: <10).")
+        
+        if win_pct >= 20: highlights.append(f"✅ <b>Strong Win Rate:</b> {win_pct:.1f}% of ads succeed.")
+        else: warnings.append(f"⚠️ <b>Low Win Rate:</b> Only {win_pct:.1f}% of ads succeed (Target: >20%).")
+        
+        if slop_spend_share > 10: warnings.append(f"💸 <b>High Waste:</b> {slop_spend_share:.1f}% budget spent on failed tests (Slop).")
+        
+        if h_life is not None and drop_idx < h_life: warnings.append(f"📉 <b>Slow Reaction:</b> Ads crash at Day {drop_idx} but you hold them until Day {int(h_life)}.")
+        
+        if not highlights and not warnings:
+            highlights.append("Data loaded successfully. Review sections for specific insights.")
 
-        verdict = "💎 Elite" if score >= 3 else "🚀 Strong" if score == 2 else "🚨 Needs Focus"
-        css = "good-job" if score >= 2 else "bad-job"
-        st.markdown(f"""<div class="summary-box {css}"><h3>Verdict: {verdict}</h3><p><strong>Strengths:</strong></p><ul>{"".join([f"<li>{x}</li>" for x in good])}</ul><p><strong>Action Items:</strong></p><ul>{"".join([f"<li>{x}</li>" for x in bad])}</ul></div>""", unsafe_allow_html=True)
+        verdict = "💎 Elite" if len(warnings) == 0 else "🚀 Strong" if len(warnings) <= 2 else "🚨 Needs Focus"
+        css = "good-job" if len(warnings) <= 1 else "bad-job"
+        
+        st.markdown(f"""
+        <div class="summary-box {css}">
+            <h3>Verdict: {verdict}</h3>
+            <p><strong>🌟 Strategic Highlights:</strong></p>
+            <ul>{"".join([f"<li>{x}</li>" for x in highlights])}</ul>
+            <p><strong>⚡ Critical Actions:</strong></p>
+            <ul>{"".join([f"<li>{x}</li>" for x in warnings])}</ul>
+        </div>""", unsafe_allow_html=True)
+
+        # --- METHODOLOGY ---
+        st.markdown("---")
+        with st.expander("🔬 Methodology & Calculation Logic"):
+            st.markdown("""
+            - **Grouping:** All data is aggregated by `Ad ID`.
+            - **Fresh vs Fatigued:** Split at Day 21. Fresh = Testing. Fatigued = Scaling.
+            - **Decay Normalization:** All ads aligned to Day 0 (Launch Date). We detect drops based on raw daily changes to find the 'cliff'.
+            - **Creative Slop:** Ads that spent < Threshold (Default 50). Represents wasted production effort.
+            - **Cost of Inaction:** Compares weeks with 0 launches vs. weeks with >0 launches.
+            """)
 
     else:
         st.error("Error: Check CSV columns.")
 else:
-    st.info("👈 Upload CSV to start.")
+    st.info("👈 Upload CSV to begin.")
